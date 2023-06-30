@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+set -e
+go fmt ./...
+go build -o inpod main.go
+exec ./inpod "$@"
