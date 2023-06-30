@@ -90,3 +90,4 @@ helm resolve-deps ~/charts/my-chart --skip-refresh --untar
 helm resolve-deps ~/charts/my-chart --skip-refresh -u -c
 helm resolve-deps --skip-refresh-in my-chart1,my-second-chart
 ```
+# helm-in-pod
