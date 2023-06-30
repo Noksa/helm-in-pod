@@ -24,7 +24,7 @@ else
   arch="arm64"
 fi
 
-url="https://github.com/Noksa/helm-in-pod/releases/download/v${version}/helm-in-pod_${version}_${os}_${arch}.tar.gz"
+url="https://github.com/Noksa/helm-in-pod/releases/download/${version}/helm-in-pod_${version}_${os}_${arch}.tar.gz"
 
 if [ "$url" = "" ]; then
   echo "Unsupported OS / architecture: ${os}_${arch}"
