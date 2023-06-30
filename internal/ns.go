@@ -17,7 +17,7 @@ func (h *HelmPodNamespace) PrepareNs() error {
 		return err
 	}
 	if ns == nil || ns.Name == "" {
-		log.Infof("Creating '%v' ns", HelmInPodNamespace)
+		log.Infof("%v Creating '%v' ns", LogHost(), HelmInPodNamespace)
 		ns, err = clientSet.CoreV1().Namespaces().Create(ctx, &v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: HelmInPodNamespace},
 		}, metav1.CreateOptions{})
@@ -30,7 +30,7 @@ func (h *HelmPodNamespace) PrepareNs() error {
 		return err
 	}
 	if sa == nil || sa.Name == "" {
-		log.Infof("Creating '%v' serviceaccount in '%v' ns", HelmInPodNamespace, HelmInPodNamespace)
+		log.Infof("%v Creating '%v' serviceaccount in '%v' ns", LogHost(), HelmInPodNamespace, HelmInPodNamespace)
 		sa, err = clientSet.CoreV1().ServiceAccounts(HelmInPodNamespace).Create(ctx, &v1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{Name: HelmInPodNamespace},
 		}, metav1.CreateOptions{})
@@ -51,7 +51,7 @@ func (h *HelmPodNamespace) CreateClusterRoleBinding() error {
 		return err
 	}
 	if crb == nil || crb.Name == "" {
-		log.Infof("Creating '%v' clusterrolebinging in '%v' ns", HelmInPodNamespace, HelmInPodNamespace)
+		log.Infof("%v Creating '%v' clusterrolebinging in '%v' ns", LogHost(), HelmInPodNamespace, HelmInPodNamespace)
 		_, err = clientSet.RbacV1().ClusterRoleBindings().Create(ctx, &rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{Name: HelmInPodNamespace},
 			Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: HelmInPodNamespace, Namespace: HelmInPodNamespace}},
@@ -71,7 +71,7 @@ func (h *HelmPodNamespace) DeleteClusterRoleBinding() error {
 		return err
 	}
 	if crb != nil && crb.Name != "" {
-		log.Infof("Removing '%v' clusterrolebinging in '%v' ns", HelmInPodNamespace, HelmInPodNamespace)
+		log.Infof("%v Removing '%v' clusterrolebinging in '%v' ns", LogHost(), HelmInPodNamespace, HelmInPodNamespace)
 		err = clientSet.RbacV1().ClusterRoleBindings().Delete(ctx, HelmInPodNamespace, metav1.DeleteOptions{})
 	}
 	return nil

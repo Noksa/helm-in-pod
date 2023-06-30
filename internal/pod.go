@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -27,7 +28,7 @@ func (h *HelmPod) DeleteAllPods() error {
 		return err
 	}
 	for _, pod := range pods.Items {
-		log.Infof("Removing '%v' pod", pod.Name)
+		log.Infof("%v Removing '%v' pod", LogHost(), pod.Name)
 		err = clientSet.CoreV1().Pods(HelmInPodNamespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
 		if err != nil {
 			return err
@@ -41,21 +42,47 @@ func (h *HelmPod) CreateHelmPod(opts HelmInPodFlags) (*corev1.Pod, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("Creating '%v' pod", HelmInPodNamespace)
+	log.Infof("%v Creating '%v' pod", LogHost(), HelmInPodNamespace)
+
+	var envVars []corev1.EnvVar
+	environ := os.Environ()
+	for _, env := range environ {
+		if strings.HasPrefix(env, "HELM_") {
+			splitted := strings.Split(env, "=")
+			envVar := corev1.EnvVar{
+				Name:  splitted[0],
+				Value: splitted[1],
+			}
+			envVars = append(envVars, envVar)
+		}
+	}
+	for k, v := range opts.Env {
+		envVar := corev1.EnvVar{
+			Name:  k,
+			Value: v,
+		}
+		envVars = append(envVars, envVar)
+	}
 	pod, err := clientSet.CoreV1().Pods(HelmInPodNamespace).Create(ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{GenerateName: fmt.Sprintf("%v-", HelmInPodNamespace), Labels: map[string]string{"host": myHostname}},
 		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{corev1.Container{
+			Containers: []corev1.Container{{
 				Name:  "helm-in-pod",
 				Image: opts.Image,
 				Command: []string{
-					"sh", "-cuex",
+					"sh", "-cue",
 				},
+				Env: envVars,
 				Args: []string{`
-trap 'exit 0' SIGINT SIGTERM
-while true; do
-  sleep 1
-done`},
+			trap 'exit 0' SIGINT SIGTERM
+      MY_TIME=0
+      END=$((MY_TIME+3600))
+			while [ $MY_TIME -lt $END ]; do
+				echo "Wait $((END-MY_TIME))s and exit"
+        MY_TIME=$((MY_TIME+1))
+				sleep 1
+			done
+			exit 0`},
 				WorkingDir: "/",
 				StartupProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
@@ -79,7 +106,7 @@ done`},
 }
 
 func (h *HelmPod) waitUntilPodIsRunning(pod *corev1.Pod) error {
-	log.Infof("Waiting until '%v' pod is ready", pod.Name)
+	log.Infof("%v Waiting until '%v' pod is ready", LogHost(), pod.Name)
 	f := func() (bool, error) {
 		myPod, err := clientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 		if err != nil {
@@ -127,7 +154,7 @@ func (h *HelmPod) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string
 		Container: HelmInPodNamespace,
 		Command: []string{"sh", "-ceu", fmt.Sprintf(`
 mkdir -p %v
-tar zxf - -C %v`, dir, filepath.Dir(dir))},
+tar zxf - -C /`, dir)},
 		Stdin:  true,
 		Stdout: true,
 		Stderr: true,
@@ -139,7 +166,7 @@ tar zxf - -C %v`, dir, filepath.Dir(dir))},
 	}
 
 	// Create a stream to the container
-	log.Infof("Copying '%v' file to '%v' pod in '%v' path", srcPath, pod.Name, destPath)
+	log.Infof("%v Copying '%v' file to '%v' pod in '%v' path", LogHost(), srcPath, pod.Name, destPath)
 	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:  bytes.NewReader(buffer.Bytes()),
 		Stdout: os.Stdout,

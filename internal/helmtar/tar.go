@@ -14,7 +14,15 @@ func Compress(src string, destPath string, buf io.Writer) error {
 	// tar > gzip > buf
 	zr := gzip.NewWriter(buf)
 	tw := tar.NewWriter(zr)
-	// walk through every file in the folder
+	stat, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	isDir := false
+	if stat.IsDir() {
+		isDir = true
+	}
+	// walk through every file in the path
 	_ = filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
 		// generate tar header
 		header, err := tar.FileInfoHeader(fi, file)
@@ -22,12 +30,15 @@ func Compress(src string, destPath string, buf io.Writer) error {
 			return err
 		}
 		dir := file
+		trim := strings.TrimSuffix(src, "/")
+		filename := ""
 		if !fi.IsDir() {
 			dir = filepath.Dir(file)
-
+			trim = filepath.Dir(trim)
+			filename = fi.Name()
 		}
-		dir = strings.ReplaceAll(dir, strings.TrimSuffix(src, "/"), destPath)
-		if !fi.IsDir() {
+		dir = strings.ReplaceAll(dir, trim, destPath)
+		if !fi.IsDir() && !strings.Contains(dir, filename) && isDir {
 			dir = fmt.Sprintf("%v/%v", dir, fi.Name())
 		}
 		header.Name = filepath.ToSlash(dir)
