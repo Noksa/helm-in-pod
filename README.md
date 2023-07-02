@@ -81,7 +81,7 @@ When `exec|run` command is called, the following things happen:
 
 ##### Examples
 
-1. Install bitnami nginx from a pod without custom values file
+* Install bitnami nginx from a pod without custom values file
 ```shell
 # Add bitnami repo on host first
 helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
@@ -89,19 +89,19 @@ helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
 # 'helm' is omitted in arguments because it is called automatically
 # So, just pass arguments to 'helm' command after '--'
 
-helm in-pod exec --update-repo bitnami -- helm install -n bitnami-nginx --create-namespace bitnami/nginx nginx
+helm in-pod exec --update-repo bitnami -- "helm install -n bitnami-nginx --create-namespace bitnami/nginx nginx"
 ```
 
-2. Install/upgrade bitnami nginx from a pod **with custom values file**
+* Install/upgrade bitnami nginx from a pod **with custom values file**
 ```shell
 helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
 # Note that we use --copy flag to copy custom values file from host to a pod using specific path
 # In '--values|-f' flag in helm we should specify path in the pod (NOT ON HOST) where we copied the file in '--copy' flag 
 helm in-pod exec --copy /home/alexandr/bitnami/nginx_values.yaml:/tmp/nginx_values.yaml \
---update-repo bitnami -- helm upgrade -i -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml
+--update-repo bitnami -- "helm upgrade -i -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml"
 ```
 
-3. Install/upgrade bitnami nginx from a pod **with custom values file** and **sql** backend for helm releases
+* Install/upgrade bitnami nginx from a pod **with custom values file** and **sql** backend for helm releases
 ```shell
 helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
 # Note that we use '--env|-e' flag to set environment variables in a container with helm
@@ -109,31 +109,53 @@ helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
 helm in-pod exec -e "HELM_DRIVER=sql" \
 -e "HELM_DRIVER_SQL_CONNECTION_STRING=postgresql://helmpostgres.helmpostgres:5432/db?user=user&password=password" \
 --copy /home/alexandr/bitnami/nginx_values.yaml:/tmp/nginx_values.yaml \
---update-repo bitnami -- helm upgrade -i -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml
+--update-repo bitnami -- "helm upgrade -i -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml"
 ```
 
+* Install/upgrade bitnami nginx from a pod **with custom values file** and **sql** backend for helm releases
+```shell
+helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
+# Note that we use '--env|-e' flag to set environment variables in a container with helm
+# to use SQL backend instead of secrets  
+helm in-pod exec -e "HELM_DRIVER=sql" \
+-e "HELM_DRIVER_SQL_CONNECTION_STRING=postgresql://helmpostgres.helmpostgres:5432/db?user=user&password=password" \
+--copy /home/alexandr/bitnami/nginx_values.yaml:/tmp/nginx_values.yaml \
+--update-repo bitnami -- "helm upgrade -i -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml"
+```
 
-4. Run helm diff **with custom values file**
+* Install/upgrade bitnami nginx from a pod **with custom values file** and **sql** backend for helm releases but substitute env values from host 
+```shell
+helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
+# Note that we use '--subst-env|-s' flag to add environment variables with values from host in a container with helm
+# to use SQL backend instead of secrets
+export HELM_DRIVER=sql
+export HELM_DRIVER_SQL_CONNECTION_STRING=postgresql://helmpostgres.helmpostgres:5432/db?user=user&password=password  
+helm in-pod exec -s "HELM_DRIVER,HELM_DRIVER_SQL_CONNECTION_STRING" \
+--copy /home/alexandr/bitnami/nginx_values.yaml:/tmp/nginx_values.yaml \
+--update-repo bitnami -- "helm upgrade -i -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml"
+```
+
+* Run helm diff **with custom values file**
 ```shell
 helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
 # Note that we use '--env|-e' flag to set helm diff environment variables in a container with helm
 # to change diff default behaviour  
 helm in-pod exec -e "HELM_DIFF_NORMALIZE_MANIFESTS=true,HELM_DIFF_USE_UPGRADE_DRY_RUN=true,HELM_DIFF_THREE_WAY_MERGE=true" \
 --copy /home/alexandr/bitnami/nginx_values.yaml:/tmp/nginx_values.yaml \
---update-repo bitnami -- helm diff upgrade -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml
+--update-repo bitnami -- "helm diff upgrade -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml"
 ```
 
-5. Run kubectl inside k8s
+* Run kubectl inside k8s
 ```shell
-helm in-pod exec -- kubectl get pods -A
+helm in-pod exec -- "kubectl get pods -A"
 ```
 
-6. Use custom image with specific `helm` version
+* Use custom image with specific `helm` version
 ```shell
-helm in-pod exec -i "alpine/helm:3.12.1" -- helm list -A 
+helm in-pod exec -i "alpine/helm:3.12.1" -- "helm list -A" 
 ```
 
-7. Use custom image and run any command
+* Use custom image and run any command
 ```shell
-helm in-pod exec -i "alpine:3.18" -- apk add curl --no-cache && curl google.com 
+helm in-pod exec -i "alpine:3.18" -- "apk add curl --no-cache && curl google.com" 
 ```
