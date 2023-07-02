@@ -4,15 +4,21 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
+	"github.com/fatih/color"
+	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/helmtar"
+	"github.com/noksa/helm-in-pod/internal/hipembedded"
 	log "github.com/sirupsen/logrus"
+	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -20,10 +26,12 @@ import (
 type HelmPod struct {
 }
 
-func (h *HelmPod) DeleteAllPods() error {
-	pods, err := clientSet.CoreV1().Pods(HelmInPodNamespace).List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("host=%v", myHostname),
-	})
+func (h *HelmPod) DeleteHelmPods(all bool) error {
+	opts := metav1.ListOptions{}
+	if !all {
+		opts.LabelSelector = fmt.Sprintf("host=%v", myHostname)
+	}
+	pods, err := clientSet.CoreV1().Pods(HelmInPodNamespace).List(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -37,8 +45,8 @@ func (h *HelmPod) DeleteAllPods() error {
 	return nil
 }
 
-func (h *HelmPod) CreateHelmPod(opts HelmInPodFlags) (*corev1.Pod, error) {
-	err := h.DeleteAllPods()
+func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error) {
+	err := h.DeleteHelmPods(false)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +71,14 @@ func (h *HelmPod) CreateHelmPod(opts HelmInPodFlags) (*corev1.Pod, error) {
 		}
 		envVars = append(envVars, envVar)
 	}
+	envVars = append(envVars, corev1.EnvVar{
+		Name:  "TIMEOUT",
+		Value: strconv.Itoa(int(opts.Timeout.Seconds())),
+	})
+	resourceList := corev1.ResourceList{
+		"cpu":    resource.MustParse(opts.Cpu),
+		"memory": resource.MustParse(opts.Memory),
+	}
 	pod, err := clientSet.CoreV1().Pods(HelmInPodNamespace).Create(ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{GenerateName: fmt.Sprintf("%v-", HelmInPodNamespace), Labels: map[string]string{"host": myHostname}},
 		Spec: corev1.PodSpec{
@@ -73,16 +89,11 @@ func (h *HelmPod) CreateHelmPod(opts HelmInPodFlags) (*corev1.Pod, error) {
 					"sh", "-cue",
 				},
 				Env: envVars,
-				Args: []string{`
-			trap 'exit 0' SIGINT SIGTERM
-      MY_TIME=0
-      END=$((MY_TIME+3600))
-			while [ $MY_TIME -lt $END ]; do
-				echo "Wait $((END-MY_TIME))s and exit"
-        MY_TIME=$((MY_TIME+1))
-				sleep 1
-			done
-			exit 0`},
+				Resources: corev1.ResourceRequirements{
+					Requests: resourceList,
+					Limits:   resourceList,
+				},
+				Args:       []string{hipembedded.GetShScript()},
 				WorkingDir: "/",
 				StartupProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
@@ -166,12 +177,19 @@ tar zxf - -C /`, dir)},
 	}
 
 	// Create a stream to the container
-	log.Infof("%v Copying '%v' file to '%v' pod in '%v' path", LogHost(), srcPath, pod.Name, destPath)
+	log.Infof("%v %v Copying %v to %v", LogHost(), LogPod(), color.CyanString(srcPath), color.MagentaString(destPath))
+	b := &strings.Builder{}
 	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:  bytes.NewReader(buffer.Bytes()),
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
+		Stdout: b,
+		Stderr: b,
 		Tty:    false,
 	})
+	if err != nil {
+		err = multierr.Append(err, fmt.Errorf(b.String()))
+	}
+	if err == nil {
+		log.Debugf("%v %v %v has been copied to %v", LogHost(), LogPod(), color.CyanString(srcPath), color.MagentaString(destPath))
+	}
 	return err
 }
