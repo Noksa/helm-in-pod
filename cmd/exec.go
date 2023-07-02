@@ -33,7 +33,7 @@ func newExecCmd() *cobra.Command {
 	execCmd.Flags().BoolVar(&opts.CopyRepo, "copy-repo", true, "Copy existing helm repositories to helm pod")
 	execCmd.Flags().StringSliceVar(&opts.UpdateRepo, "update-repo", []string{}, "A list of helm repository aliases which should be updated before running a command. Applicable only if --copy-repo set to true")
 	execCmd.Flags().StringVarP(&opts.Image, "image", "i", "docker.io/noksa/kubectl-helm:v1.25.8-v3.10.3", "An image which will be used. Must contain helm")
-	execCmd.Flags().StringVarP(&opts.Files, "copy", "c", "", "A map of files/directories which should be copied from host to container. Can be specified multiple times. Example: -c /path_on_host/values.yaml:/path_in_container/values.yaml")
+	execCmd.Flags().StringSliceVarP(&opts.Files, "copy", "c", []string{}, "A map of files/directories which should be copied from host to container. Can be specified multiple times. Example: -c /path_on_host/values.yaml:/path_in_container/values.yaml")
 	execCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return fmt.Errorf("specify command to run. Run `helm inpod exec --help` to check available options")
@@ -47,12 +47,14 @@ func newExecCmd() *cobra.Command {
 			deferErr = multierr.Append(deferErr, internal.Pod.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false}))
 			return deferErr
 		}))
-		if opts.Files != "" {
+		if len(opts.Files) > 0 {
 			opts.FilesAsMap = map[string]string{}
-			entries := strings.Split(opts.Files, ",")
-			for _, v := range entries {
-				splitted := strings.Split(v, ":")
-				opts.FilesAsMap[splitted[0]] = splitted[1]
+			for _, val := range opts.Files {
+				entries := strings.Split(val, ",")
+				for _, v := range entries {
+					splitted := strings.Split(v, ":")
+					opts.FilesAsMap[splitted[0]] = splitted[1]
+				}
 			}
 		}
 		err := internal.Namespace.PrepareNs()
