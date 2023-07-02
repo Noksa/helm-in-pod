@@ -28,13 +28,15 @@ func newExecCmd() *cobra.Command {
 	execCmd.Flags().StringVar(&opts.Cpu, "cpu", "1100m", "Pod's cpu request/limit")
 	execCmd.Flags().StringVar(&opts.Memory, "memory", "500Mi", "Pod's memory request/limit")
 	execCmd.Flags().StringToStringVarP(&opts.Env, "env", "e", map[string]string{}, "Environment variables to be set in helm's pod before running a command")
+	execCmd.Flags().StringSliceVarP(&opts.SubstEnv, "subst-env", "s", []string{}, "Environment variables to be substituted in helm's pod (WITHOUT values). Values will be substituted from exported env on host")
+
 	execCmd.Flags().BoolVar(&opts.CopyRepo, "copy-repo", true, "Copy existing helm repositories to helm pod")
 	execCmd.Flags().StringSliceVar(&opts.UpdateRepo, "update-repo", []string{}, "A list of helm repository aliases which should be updated before running a command. Applicable only if --copy-repo set to true")
 	execCmd.Flags().StringVarP(&opts.Image, "image", "i", "docker.io/noksa/kubectl-helm:v1.25.8-v3.10.3", "An image which will be used. Must contain helm")
 	execCmd.Flags().StringVarP(&opts.Files, "copy", "c", "", "A map of files/directories which should be copied from host to container. Can be specified multiple times. Example: -c /path_on_host/values.yaml:/path_in_container/values.yaml")
 	execCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			return fmt.Errorf("specify helm command to run. Run `helm inpod exec --help` to check available options")
+			return fmt.Errorf("specify command to run. Run `helm inpod exec --help` to check available options")
 		}
 		if opts.Timeout < time.Second*1 {
 			return fmt.Errorf("timeout can't be less 1s")
@@ -89,7 +91,7 @@ func newExecCmd() *cobra.Command {
 		}
 		cmdToUse := strings.Join(args, " ")
 		log.Infof("%v Running '%v' command", internal.LogPod(), cmdToUse)
-		stdout, err := operatorkclient.RunCommandInPod(cmdToUse, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+		stdout, err := operatorkclient.RunCommandInPodWithTimeout(opts.Timeout, cmdToUse, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 		if err != nil {
 			return multierr.Append(err, fmt.Errorf(stdout))
 		}

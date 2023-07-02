@@ -20,22 +20,13 @@ However, this plugin can run **any** command in a pod, not only `helm`
 
 ---
 
-#### How to install
+#### How to install/update
 
-Run the following command to install the plugin.
+Run the following command to install/update the plugin.
 
 Specify a version if you don't want to use latest
 ```shell
-helm plugin install --version "main" https://github.com/noksa/helm-in-pod.git
-```
-
----
-
-#### How to update
-Run the following command to update the plugin.
-
-```shell
-helm plugin update in-pod
+(helm plugin uninstall in-pod || true) && helm plugin install --version "main" https://github.com/noksa/helm-in-pod.git
 ```
 
 ---

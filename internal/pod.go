@@ -60,16 +60,13 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	log.Infof("%v Creating '%v' pod", LogHost(), HelmInPodNamespace)
 
 	var envVars []corev1.EnvVar
-	environ := os.Environ()
-	for _, env := range environ {
-		if strings.HasPrefix(env, "HELM_") {
-			splitted := strings.Split(env, "=")
-			envVar := corev1.EnvVar{
-				Name:  splitted[0],
-				Value: splitted[1],
-			}
-			envVars = append(envVars, envVar)
+	for _, env := range opts.SubstEnv {
+		val := os.Getenv(env)
+		envVar := corev1.EnvVar{
+			Name:  env,
+			Value: val,
 		}
+		envVars = append(envVars, envVar)
 	}
 	for k, v := range opts.Env {
 		envVar := corev1.EnvVar{

@@ -13,4 +13,5 @@ type ExecOptions struct {
 	Env        map[string]string
 	FilesAsMap map[string]string
 	Timeout    time.Duration
+	SubstEnv   []string
 }
