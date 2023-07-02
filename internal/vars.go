@@ -8,11 +8,11 @@ import (
 )
 
 var (
-	clientSet      = kubernetes.NewForConfigOrDie(operatorkclient.GetClientConfig())
-	ctx, cancelCtx = context.WithCancel(context.Background())
-	Namespace      HelmPodNamespace
-	Pod            HelmPod
-	myHostname     string
+	clientSet  = kubernetes.NewForConfigOrDie(operatorkclient.GetClientConfig())
+	ctx        = context.Background()
+	Namespace  HelmPodNamespace
+	Pod        HelmPod
+	myHostname string
 )
 
 func init() {

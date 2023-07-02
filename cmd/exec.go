@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/fatih/color"
@@ -10,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/multierr"
 	"helm.sh/helm/v3/pkg/cli"
+	"os"
 	"strings"
 	"time"
 )
@@ -26,7 +28,7 @@ func newExecCmd() *cobra.Command {
 	execCmd.Flags().StringVar(&opts.Memory, "memory", "500Mi", "Pod's memory request/limit")
 	execCmd.Flags().StringToStringVarP(&opts.Env, "env", "e", map[string]string{}, "Environment variables to be set in helm's pod before running a command")
 	execCmd.Flags().BoolVar(&opts.CopyRepo, "copy-repo", true, "Copy existing helm repositories to helm pod")
-	execCmd.Flags().StringSliceVar(&opts.UpdateRepo, "update-repo", []string{}, "A lit of helm repository aliases which should be updated before running a command. Applicable only if --copy-repo set to true")
+	execCmd.Flags().StringSliceVar(&opts.UpdateRepo, "update-repo", []string{}, "A list of helm repository aliases which should be updated before running a command. Applicable only if --copy-repo set to true")
 	execCmd.Flags().StringVarP(&opts.Image, "image", "i", "docker.io/noksa/kubectl-helm:v1.25.8-v3.10.3", "An image which will be used. Must contain helm")
 	execCmd.Flags().StringVarP(&opts.Files, "copy", "c", "", "A map of files/directories which should be copied from host to container. Can be specified multiple times. Example: -c /path_on_host/values.yaml:/path_in_container/values.yaml")
 	execCmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -60,9 +62,15 @@ func newExecCmd() *cobra.Command {
 		}
 		if opts.CopyRepo {
 			settings := cli.New()
-			err = internal.Pod.CopyFileToPod(pod, settings.RepositoryConfig, "/root/.config/helm/repositories.yaml")
-			if err != nil {
-				return err
+			_, statErr := os.Stat(settings.RepositoryConfig)
+			if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+				return statErr
+			}
+			if statErr == nil {
+				err = internal.Pod.CopyFileToPod(pod, settings.RepositoryConfig, "/root/.config/helm/repositories.yaml")
+				if err != nil {
+					return err
+				}
 			}
 			for _, repo := range opts.UpdateRepo {
 				log.Infof("%v Fetching updates from %v helm repository", internal.LogPod(), color.CyanString(repo))
@@ -78,7 +86,7 @@ func newExecCmd() *cobra.Command {
 				return err
 			}
 		}
-		cmdToUse := fmt.Sprintf("%v %v", "helm", strings.Join(args, " "))
+		cmdToUse := strings.Join(args, " ")
 		log.Infof("%v Running '%v' command", internal.LogPod(), cmdToUse)
 		stdout, err := operatorkclient.RunCommandInPod(cmdToUse, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 		if err != nil {
@@ -86,7 +94,7 @@ func newExecCmd() *cobra.Command {
 		}
 		log.Info()
 		log.Info(fmt.Sprintf("%v:\n", color.GreenString("Result")))
-		fmt.Printf(stdout)
+		fmt.Print(stdout)
 		return nil
 	}
 	return execCmd

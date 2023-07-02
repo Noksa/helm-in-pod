@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/fatih/color"
@@ -118,7 +119,7 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 
 func (h *HelmPod) waitUntilPodIsRunning(pod *corev1.Pod) error {
 	log.Infof("%v Waiting until '%v' pod is ready", LogHost(), pod.Name)
-	f := func() (bool, error) {
+	f := func(ctx context.Context) (done bool, err error) {
 		myPod, err := clientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 		if err != nil {
 			return false, err
@@ -141,7 +142,7 @@ func (h *HelmPod) waitUntilPodIsRunning(pod *corev1.Pod) error {
 		}
 		return allReady, nil
 	}
-	return wait.PollImmediate(time.Second, time.Second*30, f)
+	return wait.PollUntilContextTimeout(ctx, time.Second, time.Second*30, true, f)
 }
 
 func (h *HelmPod) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string) error {
