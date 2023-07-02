@@ -17,7 +17,7 @@ func newPurgeCmd() *cobra.Command {
 	purgeCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		var mErr error
 		mErr = multierr.Append(mErr, internal.Namespace.DeleteClusterRoleBinding())
-		mErr = multierr.Append(mErr, internal.Pod.DeleteHelmPods(opts.All))
+		mErr = multierr.Append(mErr, internal.Pod.DeleteHelmPods(cmdoptions.ExecOptions{}, opts))
 		return mErr
 	}
 	return purgeCmd

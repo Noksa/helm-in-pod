@@ -73,6 +73,7 @@ func (h *HelmPodNamespace) DeleteClusterRoleBinding() error {
 	if crb != nil && crb.Name != "" {
 		log.Debugf("%v Removing '%v' clusterrolebinging in '%v' ns", LogHost(), HelmInPodNamespace, HelmInPodNamespace)
 		err = clientSet.RbacV1().ClusterRoleBindings().Delete(ctx, HelmInPodNamespace, metav1.DeleteOptions{})
+		return err
 	}
-	return err
+	return nil
 }

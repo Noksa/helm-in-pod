@@ -23,6 +23,7 @@ func newExecCmd() *cobra.Command {
 		Short:   "Executes commands in helm pod",
 	}
 	opts := cmdoptions.ExecOptions{}
+	execCmd.Flags().StringToStringVar(&opts.Labels, "labels", map[string]string{}, "Additional labels to be set on a pod")
 	execCmd.Flags().DurationVar(&opts.Timeout, "timeout", time.Hour*1, "After timeout a helm-pod will be terminated even if a command is still running")
 	execCmd.Flags().StringVar(&opts.Cpu, "cpu", "1100m", "Pod's cpu request/limit")
 	execCmd.Flags().StringVar(&opts.Memory, "memory", "500Mi", "Pod's memory request/limit")
@@ -41,7 +42,7 @@ func newExecCmd() *cobra.Command {
 		var mErr error
 		defer multierr.AppendInvoke(&mErr, multierr.Invoke(func() error {
 			deferErr := internal.Namespace.DeleteClusterRoleBinding()
-			deferErr = multierr.Append(deferErr, internal.Pod.DeleteHelmPods(false))
+			deferErr = multierr.Append(deferErr, internal.Pod.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false}))
 			return deferErr
 		}))
 		if opts.Files != "" {

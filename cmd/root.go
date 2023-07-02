@@ -19,7 +19,12 @@ func newRootCmd() *cobra.Command {
 		newPurgeCmd())
 
 	startTime := time.Now()
+	debug := false
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug logs")
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if debug {
+			log.SetLevel(log.DebugLevel)
+		}
 		if !helpers.IsCompletionCmd(cmd) {
 			log.Warnf("Running %v command", color.CyanString(cmd.Name()))
 		}

@@ -27,10 +27,16 @@ import (
 type HelmPod struct {
 }
 
-func (h *HelmPod) DeleteHelmPods(all bool) error {
+func (h *HelmPod) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOptions cmdoptions.PurgeOptions) error {
 	opts := metav1.ListOptions{}
-	if !all {
-		opts.LabelSelector = fmt.Sprintf("host=%v", myHostname)
+	if !purgeOptions.All {
+		selector := fmt.Sprintf("host=%v", myHostname)
+		for k, v := range execOptions.Labels {
+			selector = fmt.Sprintf("%v,%v=%v", selector, k, v)
+		}
+		selector = strings.TrimSuffix(selector, ",")
+		selector = strings.TrimPrefix(selector, ",")
+		opts.LabelSelector = selector
 	}
 	pods, err := clientSet.CoreV1().Pods(HelmInPodNamespace).List(ctx, opts)
 	if err != nil {
@@ -47,7 +53,7 @@ func (h *HelmPod) DeleteHelmPods(all bool) error {
 }
 
 func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error) {
-	err := h.DeleteHelmPods(false)
+	err := h.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
 	if err != nil {
 		return nil, err
 	}
@@ -80,8 +86,12 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 		"cpu":    resource.MustParse(opts.Cpu),
 		"memory": resource.MustParse(opts.Memory),
 	}
+	labels := map[string]string{"host": myHostname}
+	for k, v := range opts.Labels {
+		labels[k] = v
+	}
 	pod, err := clientSet.CoreV1().Pods(HelmInPodNamespace).Create(ctx, &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{GenerateName: fmt.Sprintf("%v-", HelmInPodNamespace), Labels: map[string]string{"host": myHostname}},
+		ObjectMeta: metav1.ObjectMeta{GenerateName: fmt.Sprintf("%v-", HelmInPodNamespace), Labels: labels},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{
 				Name:  "helm-in-pod",
@@ -114,11 +124,12 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	if err != nil {
 		return nil, err
 	}
+	log.Debugf("%v %v pod has been created", LogHost(), color.CyanString(pod.Name))
 	return pod, h.waitUntilPodIsRunning(pod)
 }
 
 func (h *HelmPod) waitUntilPodIsRunning(pod *corev1.Pod) error {
-	log.Infof("%v Waiting until '%v' pod is ready", LogHost(), pod.Name)
+	log.Infof("%v Waiting until %v pod is ready", LogHost(), color.CyanString(pod.Name))
 	f := func(ctx context.Context) (done bool, err error) {
 		myPod, err := clientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 		if err != nil {
@@ -142,7 +153,11 @@ func (h *HelmPod) waitUntilPodIsRunning(pod *corev1.Pod) error {
 		}
 		return allReady, nil
 	}
-	return wait.PollUntilContextTimeout(ctx, time.Second, time.Second*30, true, f)
+	err := wait.PollUntilContextTimeout(ctx, time.Second, time.Second*30, true, f)
+	if err == nil {
+		log.Debugf("%v %v pod is ready", LogHost(), color.CyanString(pod.Name))
+	}
+	return err
 }
 
 func (h *HelmPod) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string) error {
