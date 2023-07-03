@@ -7,11 +7,14 @@ import (
 	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"go.uber.org/multierr"
 	"helm.sh/helm/v3/pkg/cli"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -78,7 +81,7 @@ func newExecCmd() *cobra.Command {
 				}
 			}
 			for _, repo := range opts.UpdateRepo {
-				log.Infof("%v Fetching updates from %v helm repository", internal.LogPod(), color.CyanString(repo))
+				log.Infof("%v Fetching updates from %v helm repository", logz.LogPod(), color.CyanString(repo))
 				stdout, err := operatorkclient.RunCommandInPod(fmt.Sprintf("helm repo update %v --fail-on-repo-update-fail", repo), internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 				if err != nil {
 					return multierr.Append(err, fmt.Errorf(stdout))
@@ -86,15 +89,20 @@ func newExecCmd() *cobra.Command {
 			}
 		}
 		for k, v := range opts.FilesAsMap {
-			err = internal.Pod.CopyFileToPod(pod, k, v)
+			path, err := expand(k)
+			if err != nil {
+				return err
+			}
+			err = internal.Pod.CopyFileToPod(pod, path, v)
 			if err != nil {
 				return err
 			}
 		}
 		cmdToUse := strings.Join(args, " ")
-		log.Infof("%v Running '%v' command", internal.LogPod(), cmdToUse)
+		log.Infof("%v Running '%v' command", logz.LogPod(), color.YellowString(cmdToUse))
 		stdout, err := operatorkclient.RunCommandInPodWithTimeout(opts.Timeout, cmdToUse, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 		if err != nil {
+			log.Errorf("Got an error: %v", err.Error())
 			return multierr.Append(err, fmt.Errorf(stdout))
 		}
 		log.Info()
@@ -103,4 +111,16 @@ func newExecCmd() *cobra.Command {
 		return nil
 	}
 	return execCmd
+}
+
+func expand(path string) (string, error) {
+	if len(path) == 0 || path[0] != '~' {
+		return path, nil
+	}
+
+	usr, err := user.Current()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(usr.HomeDir, path[1:]), nil
 }

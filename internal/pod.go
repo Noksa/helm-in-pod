@@ -9,6 +9,7 @@ import (
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/helmtar"
 	"github.com/noksa/helm-in-pod/internal/hipembedded"
+	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
 	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
@@ -43,7 +44,7 @@ func (h *HelmPod) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOption
 		return err
 	}
 	for _, pod := range pods.Items {
-		log.Infof("%v Removing '%v' pod", LogHost(), pod.Name)
+		log.Infof("%v Removing '%v' pod", logz.LogHost(), pod.Name)
 		err = clientSet.CoreV1().Pods(HelmInPodNamespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
 		if err != nil {
 			return err
@@ -57,7 +58,7 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("%v Creating '%v' pod", LogHost(), HelmInPodNamespace)
+	log.Infof("%v Creating '%v' pod", logz.LogHost(), HelmInPodNamespace)
 
 	var envVars []corev1.EnvVar
 	for _, env := range opts.SubstEnv {
@@ -121,12 +122,12 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	if err != nil {
 		return nil, err
 	}
-	log.Debugf("%v %v pod has been created", LogHost(), color.CyanString(pod.Name))
+	log.Debugf("%v %v pod has been created", logz.LogHost(), color.CyanString(pod.Name))
 	return pod, h.waitUntilPodIsRunning(pod)
 }
 
 func (h *HelmPod) waitUntilPodIsRunning(pod *corev1.Pod) error {
-	log.Infof("%v Waiting until %v pod is ready", LogHost(), color.CyanString(pod.Name))
+	log.Infof("%v Waiting until %v pod is ready", logz.LogHost(), color.CyanString(pod.Name))
 	f := func(ctx context.Context) (done bool, err error) {
 		myPod, err := clientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 		if err != nil {
@@ -152,13 +153,15 @@ func (h *HelmPod) waitUntilPodIsRunning(pod *corev1.Pod) error {
 	}
 	err := wait.PollUntilContextTimeout(ctx, time.Second, time.Second*30, true, f)
 	if err == nil {
-		log.Debugf("%v %v pod is ready", LogHost(), color.CyanString(pod.Name))
+		log.Debugf("%v %v pod is ready", logz.LogHost(), color.CyanString(pod.Name))
 	}
 	return err
 }
 
 func (h *HelmPod) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string) error {
 	buffer := &bytes.Buffer{}
+	srcPath = filepath.Clean(srcPath)
+	destPath = filepath.Clean(destPath)
 	err := helmtar.Compress(srcPath, destPath, buffer)
 	if err != nil {
 		return err
@@ -190,7 +193,7 @@ tar zxf - -C /`, dir)},
 	}
 
 	// Create a stream to the container
-	log.Infof("%v %v Copying %v to %v", LogHost(), LogPod(), color.CyanString(srcPath), color.MagentaString(destPath))
+	log.Infof("%v %v Copying %v to %v", logz.LogHost(), logz.LogPod(), color.CyanString(srcPath), color.MagentaString(destPath))
 	b := &strings.Builder{}
 	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:  bytes.NewReader(buffer.Bytes()),
@@ -202,7 +205,7 @@ tar zxf - -C /`, dir)},
 		err = multierr.Append(err, fmt.Errorf(b.String()))
 	}
 	if err == nil {
-		log.Debugf("%v %v %v has been copied to %v", LogHost(), LogPod(), color.CyanString(srcPath), color.MagentaString(destPath))
+		log.Debugf("%v %v %v has been copied to %v", logz.LogHost(), logz.LogPod(), color.CyanString(srcPath), color.MagentaString(destPath))
 	}
 	return err
 }

@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -17,7 +18,7 @@ func (h *HelmPodNamespace) PrepareNs() error {
 		return err
 	}
 	if ns == nil || ns.Name == "" {
-		log.Debugf("%v Creating '%v' ns", LogHost(), HelmInPodNamespace)
+		log.Debugf("%v Creating '%v' ns", logz.LogHost(), HelmInPodNamespace)
 		_, err = clientSet.CoreV1().Namespaces().Create(ctx, &v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: HelmInPodNamespace},
 		}, metav1.CreateOptions{})
@@ -30,7 +31,7 @@ func (h *HelmPodNamespace) PrepareNs() error {
 		return err
 	}
 	if sa == nil || sa.Name == "" {
-		log.Debugf("%v Creating '%v' serviceaccount in '%v' ns", LogHost(), HelmInPodNamespace, HelmInPodNamespace)
+		log.Debugf("%v Creating '%v' serviceaccount in '%v' ns", logz.LogHost(), HelmInPodNamespace, HelmInPodNamespace)
 		_, err = clientSet.CoreV1().ServiceAccounts(HelmInPodNamespace).Create(ctx, &v1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{Name: HelmInPodNamespace},
 		}, metav1.CreateOptions{})
@@ -51,7 +52,7 @@ func (h *HelmPodNamespace) CreateClusterRoleBinding() error {
 		return err
 	}
 	if crb == nil || crb.Name == "" {
-		log.Debugf("%v Creating '%v' clusterrolebinging in '%v' ns", LogHost(), HelmInPodNamespace, HelmInPodNamespace)
+		log.Debugf("%v Creating '%v' clusterrolebinging in '%v' ns", logz.LogHost(), HelmInPodNamespace, HelmInPodNamespace)
 		_, err = clientSet.RbacV1().ClusterRoleBindings().Create(ctx, &rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{Name: HelmInPodNamespace},
 			Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: HelmInPodNamespace, Namespace: HelmInPodNamespace}},
@@ -71,7 +72,7 @@ func (h *HelmPodNamespace) DeleteClusterRoleBinding() error {
 		return err
 	}
 	if crb != nil && crb.Name != "" {
-		log.Debugf("%v Removing '%v' clusterrolebinging in '%v' ns", LogHost(), HelmInPodNamespace, HelmInPodNamespace)
+		log.Debugf("%v Removing '%v' clusterrolebinging in '%v' ns", logz.LogHost(), HelmInPodNamespace, HelmInPodNamespace)
 		err = clientSet.RbacV1().ClusterRoleBindings().Delete(ctx, HelmInPodNamespace, metav1.DeleteOptions{})
 		return err
 	}

@@ -4,6 +4,9 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"fmt"
+	"github.com/fatih/color"
+	"github.com/noksa/helm-in-pod/internal/logz"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"os"
 	"path/filepath"
@@ -23,7 +26,7 @@ func Compress(src string, destPath string, buf io.Writer) error {
 		isDir = true
 	}
 	// walk through every file in the path
-	_ = filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
+	err = filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
 		// generate tar header
 		if err != nil {
 			return err
@@ -36,8 +39,6 @@ func Compress(src string, destPath string, buf io.Writer) error {
 		trim := strings.TrimSuffix(src, "/")
 		filename := ""
 		if !fi.IsDir() {
-			dir = filepath.Dir(file)
-			trim = filepath.Dir(trim)
 			filename = fi.Name()
 		}
 		dir = strings.ReplaceAll(dir, trim, destPath)
@@ -45,7 +46,7 @@ func Compress(src string, destPath string, buf io.Writer) error {
 			dir = fmt.Sprintf("%v/%v", dir, fi.Name())
 		}
 		header.Name = filepath.ToSlash(dir)
-
+		log.Debugf("%v %v %v will be copied to %v", logz.LogHost(), logz.LogPod(), color.CyanString(file), color.MagentaString(dir))
 		// write header
 		if err := tw.WriteHeader(header); err != nil {
 			return err
@@ -62,6 +63,9 @@ func Compress(src string, destPath string, buf io.Writer) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
 
 	// produce tar
 	if err := tw.Close(); err != nil {
