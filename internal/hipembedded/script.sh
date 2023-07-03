@@ -26,6 +26,7 @@ trapMe() {
 trap 'trapMe' INT TERM
 MY_TIME=0
 END=$((MY_TIME+TIMEOUT))
+touch /tmp/ready
 while [ $MY_TIME -lt $END ]; do
   echo "Wait $((END-MY_TIME))s and exit"
   MY_TIME=$((MY_TIME+1))

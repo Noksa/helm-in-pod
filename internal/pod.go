@@ -110,9 +110,9 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 				StartupProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						Exec: &corev1.ExecAction{Command: []string{"" +
-							"sh", "-c", "sleep 1 && exit 0"}},
+							"sh", "-c", "([ -f /tmp/ready ] && exit 0) || exit 1"}},
 					},
-					TimeoutSeconds:   5,
+					TimeoutSeconds:   2,
 					PeriodSeconds:    1,
 					SuccessThreshold: 1,
 					FailureThreshold: 60,
