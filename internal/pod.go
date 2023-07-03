@@ -2,7 +2,6 @@ package internal
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/fatih/color"
@@ -16,7 +15,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 	"os"
@@ -120,6 +118,7 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 			}},
 			RestartPolicy:                 "Never",
 			ServiceAccountName:            HelmInPodNamespace,
+			AutomountServiceAccountToken:  gopointer.NewOf(true),
 			TerminationGracePeriodSeconds: gopointer.NewOf[int64](300),
 		},
 	}, metav1.CreateOptions{})
@@ -130,7 +129,6 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		return
 		<-c
 		if pod != nil && pod.Name != "" {
 			log.Warnf("%v Interrupted! Destroying helm pod", logz.LogHost())
@@ -148,34 +146,24 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 
 func (h *HelmPod) waitUntilPodIsRunning(pod *corev1.Pod) error {
 	log.Infof("%v Waiting until %v pod is ready", logz.LogHost(), color.CyanString(pod.Name))
-	f := func(ctx context.Context) (done bool, err error) {
-		myPod, err := clientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
+	t := time.Now()
+	var mErr error
+	mErr = multierr.Append(mErr, fmt.Errorf("timeout waiting pod readiness"))
+	for time.Since(t) <= time.Second*30 {
+		stdout, err := operatorkclient.RunCommandInPod("[ -f /tmp/ready ] && echo ready", HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+		if err == nil && strings.Contains(stdout, "ready") {
+			mErr = nil
+			break
+		}
 		if err != nil {
-			return false, err
+			mErr = multierr.Append(mErr, err)
 		}
-
-		canContinue := false
-		switch myPod.Status.Phase {
-		case corev1.PodRunning:
-			canContinue = true
-		}
-		if !canContinue {
-			return false, nil
-		}
-		allReady := true
-		for _, container := range myPod.Status.ContainerStatuses {
-			if !container.Ready {
-				allReady = false
-				break
-			}
-		}
-		return allReady, nil
+		time.Sleep(time.Second)
 	}
-	err := wait.PollUntilContextTimeout(ctx, time.Second, time.Second*30, true, f)
-	if err == nil {
+	if mErr == nil {
 		log.Debugf("%v %v pod is ready", logz.LogHost(), color.CyanString(pod.Name))
 	}
-	return err
+	return mErr
 }
 
 func (h *HelmPod) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string) error {
