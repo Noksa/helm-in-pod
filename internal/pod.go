@@ -130,6 +130,7 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
+		return
 		<-c
 		if pod != nil && pod.Name != "" {
 			log.Warnf("%v Interrupted! Destroying helm pod", logz.LogHost())

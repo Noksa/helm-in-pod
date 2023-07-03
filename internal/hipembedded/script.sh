@@ -12,8 +12,8 @@ trapMe() {
     fi
     PIDS=$(pidof helm)
     for PID in $PIDS; do
-      echo "Sending TERM to helm process with ${PID} pid"
-      kill -term ${PID}
+      echo "Sending INT to helm process with ${PID} pid"
+      kill -INT "${PID}"
     done
     echo "Waiting for $((TRAP_END_TIME-TRAP_TIME))s until all helm processes die"
     TRAP_TIME=$((TRAP_TIME+3))
