@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/fatih/color"
+	"github.com/noksa/go-helpers/helpers/gopointer"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/helmtar"
 	"github.com/noksa/helm-in-pod/internal/hipembedded"
@@ -19,9 +20,11 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -115,13 +118,29 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 					FailureThreshold: 60,
 				},
 			}},
-			RestartPolicy:      "Never",
-			ServiceAccountName: HelmInPodNamespace,
+			RestartPolicy:                 "Never",
+			ServiceAccountName:            HelmInPodNamespace,
+			TerminationGracePeriodSeconds: gopointer.NewOf[int64](300),
 		},
 	}, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
 	}
+	// let's check interrupt signals
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		if pod != nil && pod.Name != "" {
+			log.Warnf("%v Interrupted! Destroying helm pod", logz.LogHost())
+			destroyErr := h.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
+			if destroyErr != nil {
+				log.Errorf("Couldn't destroy helm pods: %v", destroyErr.Error())
+			}
+		}
+		<-c
+		os.Exit(1) // second signal. Exit directly.
+	}()
 	log.Debugf("%v %v pod has been created", logz.LogHost(), color.CyanString(pod.Name))
 	return pod, h.waitUntilPodIsRunning(pod)
 }

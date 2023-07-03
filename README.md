@@ -31,22 +31,6 @@ Specify a version if you don't want to use latest
 
 ---
 
-#### Completion
-
-To be more productive it is recommended to add shell completion for the plugin.
-
-An instruction how it should be done can be obtained by running the following command:
-```shell
-# if zsh
-helm in-pod completion zsh --help
-# if bash
-helm in-pod completion bash --help
-# if fish
-helm in-pod completion fish --help
-```
-
----
-
 #### Usage
 
 The plugin contains several sub-commands which can be obtained by running the following command:

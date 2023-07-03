@@ -1,0 +1,25 @@
+name: in-pod
+flags:
+  - debug
+  - h
+  - help
+commands:
+  - name: purge
+    flags:
+      - all
+  - name: exec
+    flags:
+      - c
+      - copy
+      - copy-repo
+      - cpu
+      - e
+      - env
+      - i
+      - image
+      - labels
+      - memory
+      - s
+      - subst-env
+      - timeout
+      - update-repo
