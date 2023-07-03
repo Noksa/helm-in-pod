@@ -46,8 +46,7 @@ func newExecCmd() *cobra.Command {
 		}
 		var mErr error
 		defer multierr.AppendInvoke(&mErr, multierr.Invoke(func() error {
-			deferErr := internal.Namespace.DeleteClusterRoleBinding()
-			deferErr = multierr.Append(deferErr, internal.Pod.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false}))
+			deferErr := internal.Pod.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
 			return deferErr
 		}))
 		if len(opts.Files) > 0 {

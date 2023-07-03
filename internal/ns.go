@@ -39,10 +39,6 @@ func (h *HelmPodNamespace) PrepareNs() error {
 			return err
 		}
 	}
-	err = h.DeleteClusterRoleBinding()
-	if err != nil {
-		return err
-	}
 	return h.CreateClusterRoleBinding()
 }
 
