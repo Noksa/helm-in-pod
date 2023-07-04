@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
@@ -26,6 +27,8 @@ func newExecCmd() *cobra.Command {
 		Short:   "Executes commands in helm pod",
 	}
 	opts := cmdoptions.ExecOptions{}
+	execCmd.Flags().Int64Var(&opts.RunAsUser, "run-as-user", -1, "Run as user ID to be set in security context. Omitted if not specified and default from an image is used")
+	execCmd.Flags().Int64Var(&opts.RunAsGroup, "run-as-group", -1, "Run as group ID to be set in security context. Omitted if not specified and default from an image is used")
 	execCmd.Flags().StringToStringVar(&opts.Labels, "labels", map[string]string{}, "Additional labels to be set on a pod")
 	execCmd.Flags().DurationVar(&opts.Timeout, "timeout", time.Hour*1, "After timeout a helm-pod will be terminated even if a command is still running")
 	execCmd.Flags().StringVar(&opts.Cpu, "cpu", "1100m", "Pod's cpu request/limit")
@@ -80,7 +83,7 @@ func newExecCmd() *cobra.Command {
 				var stdout string
 				for i := 0; i < attempts; i++ {
 					log.Debugf("%v Determining user home directory", logz.LogPod())
-					stdout, rErr = operatorkclient.RunCommandInPod(`mkdir -p "${HOME}/.config/helm" &>/dev/null; echo "${HOME}"`, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+					stdout, rErr = operatorkclient.RunCommandInPod(`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null; echo "${HOME}:::$(whoami):::$(id)"`, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 					if rErr == nil {
 						aErr = nil
 						break
@@ -92,9 +95,22 @@ func newExecCmd() *cobra.Command {
 					return aErr
 				}
 				stdout = strings.TrimSpace(stdout)
-				stdout = strings.TrimSuffix(stdout, "/")
-				log.Debugf("%v User's home directory: %v", logz.LogPod(), color.MagentaString(stdout))
-				err = internal.Pod.CopyFileToPod(pod, settings.RepositoryConfig, fmt.Sprintf("%v/.config/helm/repositories.yaml", stdout))
+				splitted := strings.Split(stdout, ":::")
+				homeDirectory := strings.TrimSuffix(splitted[0], "/")
+				whoami := "unknown"
+				id := "unknown"
+				if len(splitted) >= 2 {
+					whoami = splitted[1]
+				}
+				if len(splitted) >= 3 {
+					id = splitted[2]
+				}
+				userInfo := fmt.Sprintf("id: %v, whoami: %v", color.GreenString(id), color.YellowString(whoami))
+				if homeDirectory == "" {
+					return fmt.Errorf("user (%v) in the image doesn't have home directory", userInfo)
+				}
+				log.Debugf("%v (%v) home directory: %v", logz.LogPod(), color.GreenString(whoami), color.MagentaString(homeDirectory))
+				err = internal.Pod.CopyFileToPod(pod, settings.RepositoryConfig, fmt.Sprintf("%v/.config/helm/repositories.yaml", homeDirectory))
 				if err != nil {
 					return err
 				}
@@ -119,15 +135,19 @@ func newExecCmd() *cobra.Command {
 		}
 		cmdToUse := strings.Join(args, " ")
 		log.Infof("%v Running '%v' command", logz.LogPod(), color.YellowString(cmdToUse))
-		stdout, err := operatorkclient.RunCommandInPodWithTimeout(opts.Timeout, cmdToUse, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
-		if err != nil {
-			log.Errorf("Got an error: %v", err.Error())
-			return multierr.Append(err, fmt.Errorf(stdout))
-		}
-		log.Info()
-		log.Info(fmt.Sprintf("%v:\n", color.GreenString("Result")))
-		fmt.Print(stdout)
-		return nil
+
+		_, err = operatorkclient.RunCommandInPodWithOptions(operatorkclient.RunCommandInPodOptions{
+			Context:       context.Background(),
+			Timeout:       opts.Timeout,
+			Command:       cmdToUse,
+			PodName:       pod.Name,
+			PodNamespace:  pod.Namespace,
+			ContainerName: internal.HelmInPodNamespace,
+			Stdin:         nil,
+			Stderr:        nil,
+			Stdout:        os.Stdout,
+		})
+		return err
 	}
 	return execCmd
 }

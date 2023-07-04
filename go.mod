@@ -3,7 +3,7 @@ module github.com/noksa/helm-in-pod
 go 1.20
 
 require (
-	github.com/Noksa/operator-home v0.1.6
+	github.com/Noksa/operator-home v0.1.7
 	github.com/fatih/color v1.13.0
 	github.com/noksa/go-helpers v0.0.0-20221015170552-c776d64423ef
 	github.com/sirupsen/logrus v1.9.0

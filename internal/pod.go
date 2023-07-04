@@ -89,6 +89,13 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	for k, v := range opts.Labels {
 		labels[k] = v
 	}
+	securityContext := &corev1.SecurityContext{}
+	if opts.RunAsUser > -1 {
+		securityContext.RunAsUser = gopointer.NewOf(opts.RunAsUser)
+	}
+	if opts.RunAsGroup > -1 {
+		securityContext.RunAsGroup = gopointer.NewOf(opts.RunAsGroup)
+	}
 	pod, err := clientSet.CoreV1().Pods(HelmInPodNamespace).Create(ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{GenerateName: fmt.Sprintf("%v-", HelmInPodNamespace), Labels: labels},
 		Spec: corev1.PodSpec{
@@ -103,8 +110,9 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 					Requests: resourceList,
 					Limits:   resourceList,
 				},
-				Args:       []string{hipembedded.GetShScript()},
-				WorkingDir: "/",
+				SecurityContext: securityContext,
+				Args:            []string{hipembedded.GetShScript()},
+				WorkingDir:      "/",
 				StartupProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						Exec: &corev1.ExecAction{Command: []string{"" +

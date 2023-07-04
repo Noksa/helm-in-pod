@@ -14,4 +14,6 @@ type ExecOptions struct {
 	FilesAsMap map[string]string
 	Timeout    time.Duration
 	SubstEnv   []string
+	RunAsUser  int64
+	RunAsGroup int64
 }
