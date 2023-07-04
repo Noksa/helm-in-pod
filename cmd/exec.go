@@ -74,7 +74,27 @@ func newExecCmd() *cobra.Command {
 				return statErr
 			}
 			if statErr == nil {
-				err = internal.Pod.CopyFileToPod(pod, settings.RepositoryConfig, "/root/.config/helm/repositories.yaml")
+				// determine user home directory
+				attempts := 3
+				var aErr, rErr error
+				var stdout string
+				for i := 0; i < attempts; i++ {
+					log.Debugf("%v Determining user home directory", logz.LogPod())
+					stdout, rErr = operatorkclient.RunCommandInPod(`mkdir -p "${HOME}/.config/helm" &>/dev/null; echo "${HOME}"`, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+					if rErr == nil {
+						aErr = nil
+						break
+					}
+					aErr = multierr.Append(aErr, rErr)
+					time.Sleep(time.Second)
+				}
+				if aErr != nil {
+					return aErr
+				}
+				stdout = strings.TrimSpace(stdout)
+				stdout = strings.TrimSuffix(stdout, "/")
+				log.Debugf("%v User's home directory: %v", logz.LogPod(), color.MagentaString(stdout))
+				err = internal.Pod.CopyFileToPod(pod, settings.RepositoryConfig, fmt.Sprintf("%v/.config/helm/repositories.yaml", stdout))
 				if err != nil {
 					return err
 				}
