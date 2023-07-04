@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+rm -rf ../generated
 mkdir -p ../generated
 cd ../generated
 version="$(cat ../plugin.yaml | grep "version" | cut -d '"' -f 2)"
@@ -12,7 +13,7 @@ for A in $ARCH; do
       output="in-pod.exe"
     fi
     CGO_ENABLED=0 GOARCH=$A GOOS=$O go build -o "${output}" ../main.go
-    tar -czvf "helm-in-pod_${version}_${O}_${A}.tar.gz" "${output}"
+    gtar -czvf "helm-in-pod_${version}_${O}_${A}.tar.gz" "${output}"
     rm -rf "${output}"
   done
 done
