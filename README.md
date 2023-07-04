@@ -26,7 +26,7 @@ Run the following command to install/update the plugin.
 
 You can specify any existing version (check releases)
 ```shell
-(helm plugin uninstall in-pod || true) && helm plugin install --version "main" https://github.com/noksa/helm-in-pod.git
+(helm plugin uninstall in-pod || true) && helm plugin install --version "main" https://github.com/Noksa/helm-in-pod
 ```
 
 ---
