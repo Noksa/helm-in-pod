@@ -65,6 +65,16 @@ When `exec|run` command is called, the following things happen:
 
 ##### Examples
 
+* Get all pods
+```shell
+helm in-pod exec -- "kubectl get pods -A"
+```
+
+* List all helm releases
+```shell
+helm in-pod exec -- "helm list -A"
+```
+
 * Install bitnami nginx from a pod without custom values file
 ```shell
 # Add bitnami repo on host first
