@@ -158,12 +158,13 @@ func (h *HelmPod) waitUntilPodIsRunning(pod *corev1.Pod) error {
 	var mErr error
 	mErr = multierr.Append(mErr, fmt.Errorf("timeout waiting pod readiness"))
 	for time.Since(t) <= time.Minute*5 {
-		stdout, err := operatorkclient.RunCommandInPod("[ -f /tmp/ready ] && echo ready", HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+		stdout, stderr, err := operatorkclient.RunCommandInPod("[ -f /tmp/ready ] && echo ready", HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 		if err == nil && strings.Contains(stdout, "ready") {
 			mErr = nil
 			break
 		}
 		if err != nil {
+			mErr = multierr.Append(mErr, fmt.Errorf(stderr))
 			mErr = multierr.Append(mErr, err)
 		}
 		time.Sleep(time.Second)

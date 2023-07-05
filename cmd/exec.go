@@ -80,14 +80,15 @@ func newExecCmd() *cobra.Command {
 				// determine user home directory
 				attempts := 3
 				var aErr, rErr error
-				var stdout string
+				var stdout, stderr string
 				for i := 0; i < attempts; i++ {
 					log.Debugf("%v Determining user home directory", logz.LogPod())
-					stdout, rErr = operatorkclient.RunCommandInPod(`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null; echo "${HOME}:::$(whoami):::$(id)"`, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+					stdout, stderr, rErr = operatorkclient.RunCommandInPod(`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null; echo "${HOME}:::$(whoami):::$(id)"`, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 					if rErr == nil {
 						aErr = nil
 						break
 					}
+					aErr = multierr.Append(aErr, fmt.Errorf(stderr))
 					aErr = multierr.Append(aErr, rErr)
 					time.Sleep(time.Second)
 				}
@@ -117,9 +118,9 @@ func newExecCmd() *cobra.Command {
 			}
 			for _, repo := range opts.UpdateRepo {
 				log.Infof("%v Fetching updates from %v helm repository", logz.LogPod(), color.CyanString(repo))
-				stdout, err := operatorkclient.RunCommandInPod(fmt.Sprintf("helm repo update %v --fail-on-repo-update-fail", repo), internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+				stdout, stderr, err := operatorkclient.RunCommandInPod(fmt.Sprintf("helm repo update %v --fail-on-repo-update-fail", repo), internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 				if err != nil {
-					return multierr.Append(err, fmt.Errorf(stdout))
+					return multierr.Append(err, fmt.Errorf("%v\n%v", stdout, stderr))
 				}
 			}
 		}
@@ -136,7 +137,8 @@ func newExecCmd() *cobra.Command {
 		cmdToUse := strings.Join(args, " ")
 		log.Infof("%v Running '%v' command", logz.LogPod(), color.YellowString(cmdToUse))
 
-		_, err = operatorkclient.RunCommandInPodWithOptions(operatorkclient.RunCommandInPodOptions{
+		// do not use stdout and stderr vars, we are going to stream everything to stdout
+		_, _, err = operatorkclient.RunCommandInPodWithOptions(operatorkclient.RunCommandInPodOptions{
 			Context:       context.Background(),
 			Timeout:       opts.Timeout,
 			Command:       cmdToUse,
@@ -144,7 +146,7 @@ func newExecCmd() *cobra.Command {
 			PodNamespace:  pod.Namespace,
 			ContainerName: internal.HelmInPodNamespace,
 			Stdin:         nil,
-			Stderr:        nil,
+			Stderr:        os.Stdout,
 			Stdout:        os.Stdout,
 		})
 		return err
