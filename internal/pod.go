@@ -96,39 +96,43 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	if opts.RunAsGroup > -1 {
 		securityContext.RunAsGroup = gopointer.NewOf(opts.RunAsGroup)
 	}
+	podSpec := corev1.PodSpec{
+		Containers: []corev1.Container{{
+			Name:  "helm-in-pod",
+			Image: opts.Image,
+			Command: []string{
+				"sh", "-cue",
+			},
+			Env: envVars,
+			Resources: corev1.ResourceRequirements{
+				Requests: resourceList,
+				Limits:   resourceList,
+			},
+			SecurityContext: securityContext,
+			Args:            []string{hipembedded.GetShScript()},
+			WorkingDir:      "/",
+			StartupProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					Exec: &corev1.ExecAction{Command: []string{"" +
+						"sh", "-c", "([ -f /tmp/ready ] && exit 0) || exit 1"}},
+				},
+				TimeoutSeconds:   2,
+				PeriodSeconds:    1,
+				SuccessThreshold: 1,
+				FailureThreshold: 60,
+			},
+		}},
+		RestartPolicy:                 "Never",
+		ServiceAccountName:            HelmInPodNamespace,
+		AutomountServiceAccountToken:  gopointer.NewOf(true),
+		TerminationGracePeriodSeconds: gopointer.NewOf[int64](300),
+	}
+	if opts.ImagePullSecret != "" {
+		podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{Name: opts.ImagePullSecret})
+	}
 	pod, err := clientSet.CoreV1().Pods(HelmInPodNamespace).Create(ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{GenerateName: fmt.Sprintf("%v-", HelmInPodNamespace), Labels: labels},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{
-				Name:  "helm-in-pod",
-				Image: opts.Image,
-				Command: []string{
-					"sh", "-cue",
-				},
-				Env: envVars,
-				Resources: corev1.ResourceRequirements{
-					Requests: resourceList,
-					Limits:   resourceList,
-				},
-				SecurityContext: securityContext,
-				Args:            []string{hipembedded.GetShScript()},
-				WorkingDir:      "/",
-				StartupProbe: &corev1.Probe{
-					ProbeHandler: corev1.ProbeHandler{
-						Exec: &corev1.ExecAction{Command: []string{"" +
-							"sh", "-c", "([ -f /tmp/ready ] && exit 0) || exit 1"}},
-					},
-					TimeoutSeconds:   2,
-					PeriodSeconds:    1,
-					SuccessThreshold: 1,
-					FailureThreshold: 60,
-				},
-			}},
-			RestartPolicy:                 "Never",
-			ServiceAccountName:            HelmInPodNamespace,
-			AutomountServiceAccountToken:  gopointer.NewOf(true),
-			TerminationGracePeriodSeconds: gopointer.NewOf[int64](300),
-		},
+		Spec:       podSpec,
 	}, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
