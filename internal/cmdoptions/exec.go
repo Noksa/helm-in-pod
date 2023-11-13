@@ -1,6 +1,8 @@
 package cmdoptions
 
-import "time"
+import (
+	"time"
+)
 
 type ExecOptions struct {
 	Image           string
@@ -17,4 +19,5 @@ type ExecOptions struct {
 	RunAsUser       int64
 	RunAsGroup      int64
 	ImagePullSecret string
+	PullPolicy      string
 }
