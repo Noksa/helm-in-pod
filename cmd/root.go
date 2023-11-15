@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/helpers"
@@ -21,6 +22,8 @@ func newRootCmd() *cobra.Command {
 	startTime := time.Now()
 	var debug bool
 	rootCmd.PersistentFlags().BoolVar(&debug, "verbose-logs", false, "Enable debug logs")
+	rootCmd.PersistentFlags().Duration("timeout", time.Second*0, "After timeout a command will be gracefully terminated even if it is still running. Default is 1h")
+
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if debug {
 			log.Info("Setting log level to debug")
@@ -40,9 +43,8 @@ func newRootCmd() *cobra.Command {
 	return rootCmd
 }
 
-func ExecuteRoot(args []string) (err error) {
+func ExecuteRoot() (context.Context, error) {
 	rootCmd := newRootCmd()
 	rootCmd.SilenceUsage = true
-	rootCmd.SetArgs(args)
 	return internal.RunCommand(rootCmd)
 }

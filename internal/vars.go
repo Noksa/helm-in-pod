@@ -9,7 +9,8 @@ import (
 
 var (
 	clientSet  = kubernetes.NewForConfigOrDie(operatorkclient.GetClientConfig())
-	ctx        = context.Background()
+	ctx        context.Context
+	cancel     context.CancelFunc
 	Namespace  HelmPodNamespace
 	Pod        HelmPod
 	myHostname string

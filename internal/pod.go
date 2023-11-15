@@ -1,7 +1,9 @@
 package internal
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/fatih/color"
@@ -12,6 +14,7 @@ import (
 	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
 	"go.uber.org/multierr"
+	"io"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,6 +23,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strconv"
 	"strings"
 	"syscall"
@@ -40,13 +44,13 @@ func (h *HelmPod) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOption
 		selector = strings.TrimPrefix(selector, ",")
 		opts.LabelSelector = selector
 	}
-	pods, err := clientSet.CoreV1().Pods(HelmInPodNamespace).List(ctx, opts)
+	pods, err := clientSet.CoreV1().Pods(HelmInPodNamespace).List(context.Background(), opts)
 	if err != nil {
 		return err
 	}
 	for _, pod := range pods.Items {
-		log.Infof("%v Removing '%v' pod", logz.LogHost(), pod.Name)
-		err = clientSet.CoreV1().Pods(HelmInPodNamespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
+		log.Debugf("%v Removing '%v' pod", logz.LogHost(), pod.Name)
+		err = clientSet.CoreV1().Pods(HelmInPodNamespace).Delete(context.Background(), pod.Name, metav1.DeleteOptions{})
 		if err != nil {
 			return err
 		}
@@ -79,7 +83,7 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	}
 	envVars = append(envVars, corev1.EnvVar{
 		Name:  "TIMEOUT",
-		Value: strconv.Itoa(int(opts.Timeout.Seconds())),
+		Value: strconv.Itoa(int(time.Hour * 2)),
 	})
 	resourceList := corev1.ResourceList{
 		"cpu":    resource.MustParse(opts.Cpu),
@@ -123,7 +127,7 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 				FailureThreshold: 60,
 			},
 		}},
-		RestartPolicy:                 "Never",
+		RestartPolicy:                 corev1.RestartPolicyNever,
 		ServiceAccountName:            HelmInPodNamespace,
 		AutomountServiceAccountToken:  gopointer.NewOf(true),
 		TerminationGracePeriodSeconds: gopointer.NewOf[int64](300),
@@ -230,4 +234,37 @@ tar zxf - -C /`, dir)},
 		log.Debugf("%v %v %v has been copied to %v", logz.LogHost(), logz.LogPod(), color.CyanString(srcPath), color.MagentaString(destPath))
 	}
 	return err
+}
+
+func (h *HelmPod) StreamLogsFromPod(ctx context.Context, pod *corev1.Pod, writer io.Writer, since time.Time) error {
+	req := clientSet.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{
+		Follow:    true,
+		SinceTime: &metav1.Time{Time: since},
+	})
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+	r := bufio.NewReader(stream)
+	for {
+		line, err := r.ReadBytes('\n')
+		if len(line) != 0 {
+			_, _ = writer.Write(line)
+		}
+		if err != nil {
+			if err != io.EOF {
+				return err
+			}
+			return nil
+		}
+	}
+}
+
+func (h *HelmPod) GetPodPhase(ctx context.Context, pod *corev1.Pod) (corev1.PodPhase, error) {
+	myPod, err := clientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
+	if err != nil {
+		return corev1.PodFailed, client.IgnoreNotFound(err)
+	}
+	return myPod.Status.Phase, nil
 }

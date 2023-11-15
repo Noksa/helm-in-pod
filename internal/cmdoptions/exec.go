@@ -1,9 +1,5 @@
 package cmdoptions
 
-import (
-	"time"
-)
-
 type ExecOptions struct {
 	Image           string
 	Files           []string
@@ -14,7 +10,6 @@ type ExecOptions struct {
 	Memory          string
 	Env             map[string]string
 	FilesAsMap      map[string]string
-	Timeout         time.Duration
 	SubstEnv        []string
 	RunAsUser       int64
 	RunAsGroup      int64

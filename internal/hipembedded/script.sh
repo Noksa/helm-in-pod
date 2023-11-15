@@ -5,31 +5,43 @@ trapMe() {
   TRAP_TIME=0
   TRAP_END_TIME=$((TRAP_TIME+180))
   while [ $TRAP_TIME -lt $TRAP_END_TIME ]; do
-    RES=$(ps aux | grep helm | grep -v "grep" | wc -l)
-    if [ "${RES}" = "0" ]; then
-      echo "No helm processes found, exiting"
-      exit 0
+    echo "Sending INT and TERM to all processes except PID 1"
+    kill -s INT -1 2>/dev/null
+    kill -s TERM -1 2>/dev/null
+    RES="$(ps aux | grep "/helm-in-pod/wrapped-script.sh" | grep -v "grep" | xargs)"
+    if [ -z "${RES}" ]; then
+      RES="$(ps aux | grep "helm" | grep -v "grep" | xargs)"
     fi
-    PIDS=$(pidof helm)
-    for PID in $PIDS; do
-      echo "Sending INT to helm process with ${PID} pid"
-      kill -INT "${PID}"
-    done
-    echo "Waiting for $((TRAP_END_TIME-TRAP_TIME))s until all helm processes die"
+    if [ -z "${RES}" ]; then
+      RES="$(ps aux | grep "kubectl" | grep -v "grep" | xargs)"
+    fi
+    if [ -z "${RES}" ]; then
+      echo "exiting - no wrapped-script/helm/kubectl processes found"
+      exit 1
+    fi
     TRAP_TIME=$((TRAP_TIME+3))
     sleep 3
   done
-  exit 0
+  exit 1
 }
 
 
 trap 'trapMe' INT TERM
+set -eu
 MY_TIME=0
 END=$((MY_TIME+TIMEOUT))
 touch /tmp/ready
+SCRIPT_PATH="/helm-in-pod/wrapped-script.sh"
 while [ $MY_TIME -lt $END ]; do
-  echo "Wait $((END-MY_TIME))s and exit"
-  MY_TIME=$((MY_TIME+1))
-  sleep 1
+  #echo "Waiting ${SCRIPT_PATH}"
+  if [ ! -f "${SCRIPT_PATH}" ]; then
+    sleep 1
+    continue
+  fi
+  break
 done
-exit 0
+
+#echo "#### EXECUTION STARTED ####"
+sh -eu "${SCRIPT_PATH}" &
+wait
+exit $?

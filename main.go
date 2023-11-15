@@ -8,8 +8,14 @@ import (
 
 func main() {
 	log.SetOutput(os.Stderr)
-	err := cmd.ExecuteRoot(os.Args[1:])
+	ctx, err := cmd.ExecuteRoot()
 	if err != nil {
-		os.Exit(1)
+		if ctx.Err() != nil {
+			log.Println(ctx.Err())
+			os.Exit(2)
+		} else {
+			log.Println(err)
+			os.Exit(1)
+		}
 	}
 }

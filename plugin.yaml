@@ -1,5 +1,5 @@
 name: "in-pod"
-version: "0.1.6"
+version: "0.2.0"
 usage: "Run any command using privileged pod in a k8s cluster"
 command: "$HELM_PLUGIN_DIR/bin/in-pod"
 useTunnel: false

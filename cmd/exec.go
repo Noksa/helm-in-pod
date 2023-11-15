@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,10 +14,14 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/multierr"
 	"helm.sh/helm/v3/pkg/cli"
+	"io"
+	corev1 "k8s.io/api/core/v1"
 	"os"
 	"os/user"
 	"path/filepath"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -30,7 +35,6 @@ func newExecCmd() *cobra.Command {
 	execCmd.Flags().Int64Var(&opts.RunAsUser, "run-as-user", -1, "Run as user ID to be set in security context. Omitted if not specified and default from an image is used")
 	execCmd.Flags().Int64Var(&opts.RunAsGroup, "run-as-group", -1, "Run as group ID to be set in security context. Omitted if not specified and default from an image is used")
 	execCmd.Flags().StringToStringVar(&opts.Labels, "labels", map[string]string{}, "Additional labels to be set on a pod")
-	execCmd.Flags().DurationVar(&opts.Timeout, "timeout", time.Hour*1, "After timeout a helm-pod will be terminated even if a command is still running")
 	execCmd.Flags().StringVar(&opts.Cpu, "cpu", "1100m", "Pod's cpu request/limit")
 	execCmd.Flags().StringVar(&opts.Memory, "memory", "500Mi", "Pod's memory request/limit")
 	execCmd.Flags().StringToStringVarP(&opts.Env, "env", "e", map[string]string{}, "Environment variables to be set in helm's pod before running a command")
@@ -41,12 +45,10 @@ func newExecCmd() *cobra.Command {
 	execCmd.Flags().StringSliceVar(&opts.UpdateRepo, "update-repo", []string{}, "A list of helm repository aliases which should be updated before running a command. Applicable only if --copy-repo set to true")
 	execCmd.Flags().StringVarP(&opts.Image, "image", "i", "docker.io/noksa/kubectl-helm:v1.25.8-v3.10.3", "An image which will be used. Must contain helm")
 	execCmd.Flags().StringSliceVarP(&opts.Files, "copy", "c", []string{}, "A map of files/directories which should be copied from host to container. Can be specified multiple times. Example: -c /path_on_host/values.yaml:/path_in_container/values.yaml")
+
 	execCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return fmt.Errorf("specify command to run. Run `helm inpod exec --help` to check available options")
-		}
-		if opts.Timeout < time.Second*1 {
-			return fmt.Errorf("timeout can't be less 1s")
 		}
 		var mErr error
 		defer multierr.AppendInvoke(&mErr, multierr.Invoke(func() error {
@@ -136,21 +138,98 @@ func newExecCmd() *cobra.Command {
 			}
 		}
 		cmdToUse := strings.Join(args, " ")
-		log.Infof("%v Running '%v' command", logz.LogPod(), color.YellowString(cmdToUse))
 
-		// do not use stdout and stderr vars, we are going to stream everything to stdout
-		_, _, err = operatorkclient.RunCommandInPodWithOptions(operatorkclient.RunCommandInPodOptions{
-			Context:       context.Background(),
-			Timeout:       opts.Timeout,
-			Command:       cmdToUse,
-			PodName:       pod.Name,
-			PodNamespace:  pod.Namespace,
-			ContainerName: internal.HelmInPodNamespace,
-			Stdin:         nil,
-			Stderr:        os.Stdout,
-			Stdout:        os.Stdout,
-		})
-		return err
+		tempScriptFile, err := os.CreateTemp("", "helm-in-pod")
+		if err != nil {
+			return err
+		}
+		err = os.Chmod(tempScriptFile.Name(), os.ModePerm)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if tempScriptFile != nil {
+				_ = tempScriptFile.Close()
+				_ = os.RemoveAll(tempScriptFile.Name())
+			}
+		}()
+
+		_, err = tempScriptFile.WriteString(cmdToUse)
+		if err != nil {
+			return err
+		}
+		scriptToRun := "/helm-in-pod/wrapped-script.sh"
+		since := time.Now()
+		err = internal.Pod.CopyFileToPod(pod, tempScriptFile.Name(), scriptToRun)
+		if err != nil {
+			return err
+		}
+		log.Infof("%v Running '%v' command", logz.LogPod(), color.YellowString(cmdToUse))
+		b := &bytes.Buffer{}
+		multiWriter := io.MultiWriter(os.Stdout, b)
+		mErr = nil
+
+		go func() {
+			<-execCmd.Context().Done()
+			for {
+				_, _, err := operatorkclient.RunCommandInPod("kill -term 1", "helm-in-pod", pod.Name, pod.Namespace, nil)
+				if err == nil {
+					return
+				}
+				time.Sleep(time.Millisecond * 50)
+			}
+		}()
+
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				// use context.Background here
+				phase, err := internal.Pod.GetPodPhase(context.Background(), pod)
+				if err != nil {
+					if client.IgnoreNotFound(err) == nil {
+						return
+					}
+					time.Sleep(time.Millisecond * 50)
+				}
+				if phase == corev1.PodFailed || phase == corev1.PodSucceeded {
+					return
+				}
+				err = internal.Pod.StreamLogsFromPod(context.Background(), pod, multiWriter, since)
+				since = time.Now()
+				if err == nil {
+					return
+				}
+				log.Infof("got an error from streaming pod logs: %v", err)
+				time.Sleep(time.Millisecond * 100)
+			}
+		}()
+		wg.Wait()
+		var phase corev1.PodPhase
+
+		log.Debugf("%v Waiting correct pod phase", logz.LogHost())
+		mErr = nil
+		for t := time.Now(); time.Since(t) <= time.Second*5; {
+			phase, err = internal.Pod.GetPodPhase(context.Background(), pod)
+			mErr = multierr.Append(mErr, err)
+			if err == nil && phase != corev1.PodRunning {
+				mErr = nil
+				break
+			}
+			time.Sleep(time.Millisecond * 50)
+		}
+		if mErr != nil {
+			return mErr
+		}
+		log.Debugf("%v Pod got phase: %v", logz.LogHost(), color.CyanString("%v", phase))
+		if phase == corev1.PodFailed {
+			return fmt.Errorf("failed")
+		}
+		if phase == corev1.PodSucceeded {
+			return nil
+		}
+		return fmt.Errorf("unexpected pod phase: %v", phase)
 	}
 	return execCmd
 }
