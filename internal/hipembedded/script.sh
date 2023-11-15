@@ -8,7 +8,7 @@ trapMe() {
     echo "Sending INT and TERM to all processes except PID 1"
     kill -s INT -1 2>/dev/null
     kill -s TERM -1 2>/dev/null
-    RES="$(ps aux | grep "/helm-in-pod/wrapped-script.sh" | grep -v "grep" | xargs)"
+    RES="$(ps aux | grep "${HOME}/wrapped-script.sh" | grep -v "grep" | xargs)"
     if [ -z "${RES}" ]; then
       RES="$(ps aux | grep "helm" | grep -v "grep" | xargs)"
     fi
@@ -31,7 +31,7 @@ set -eu
 MY_TIME=0
 END=$((MY_TIME+TIMEOUT))
 touch /tmp/ready
-SCRIPT_PATH="/helm-in-pod/wrapped-script.sh"
+SCRIPT_PATH="${HOME}/wrapped-script.sh"
 while [ $MY_TIME -lt $END ]; do
   #echo "Waiting ${SCRIPT_PATH}"
   if [ ! -f "${SCRIPT_PATH}" ]; then

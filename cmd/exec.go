@@ -73,6 +73,43 @@ func newExecCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
+		mErr = nil
+		attempts := 3
+		var runCommandErr error
+		var stdout, stderr string
+		for i := 0; i < attempts; i++ {
+			log.Debugf("%v Determining user home directory", logz.LogPod())
+			stdout, stderr, runCommandErr = operatorkclient.RunCommandInPod(`echo "${HOME}:::$(whoami):::$(id)"`, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+			if runCommandErr == nil {
+				mErr = nil
+				break
+			}
+			mErr = multierr.Append(mErr, fmt.Errorf(stderr))
+			mErr = multierr.Append(mErr, runCommandErr)
+			time.Sleep(time.Second)
+		}
+		if mErr != nil {
+			return mErr
+		}
+		mErr = nil
+		stdout = strings.TrimSpace(stdout)
+		splitted := strings.Split(stdout, ":::")
+		homeDirectory := strings.TrimSuffix(splitted[0], "/")
+		whoami := "unknown"
+		id := "unknown"
+		if len(splitted) >= 2 {
+			whoami = splitted[1]
+		}
+		if len(splitted) >= 3 {
+			id = splitted[2]
+		}
+
+		userInfo := fmt.Sprintf("id: %v, whoami: %v", color.GreenString(id), color.YellowString(whoami))
+		if homeDirectory == "" {
+			return fmt.Errorf("user (%v) in the image doesn't have home directory", userInfo)
+		}
+		log.Debugf("%v (%v) home directory: %v", logz.LogPod(), color.GreenString(whoami), color.MagentaString(homeDirectory))
+
 		if opts.CopyRepo {
 			settings := cli.New()
 			_, statErr := os.Stat(settings.RepositoryConfig)
@@ -80,40 +117,23 @@ func newExecCmd() *cobra.Command {
 				return statErr
 			}
 			if statErr == nil {
-				// determine user home directory
 				attempts := 3
-				var aErr, rErr error
-				var stdout, stderr string
 				for i := 0; i < attempts; i++ {
-					log.Debugf("%v Determining user home directory", logz.LogPod())
-					stdout, stderr, rErr = operatorkclient.RunCommandInPod(`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null; echo "${HOME}:::$(whoami):::$(id)"`, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
-					if rErr == nil {
-						aErr = nil
+					log.Debugf("%v Creating %v/.config/helm directory", logz.LogPod(), homeDirectory)
+					stdout, stderr, runCommandErr = operatorkclient.RunCommandInPod(`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null`, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+					if runCommandErr == nil {
+						mErr = nil
 						break
 					}
-					aErr = multierr.Append(aErr, fmt.Errorf(stderr))
-					aErr = multierr.Append(aErr, rErr)
+					mErr = multierr.Append(mErr, fmt.Errorf(stderr))
+					mErr = multierr.Append(mErr, runCommandErr)
 					time.Sleep(time.Second)
 				}
-				if aErr != nil {
-					return aErr
+				if mErr != nil {
+					return mErr
 				}
-				stdout = strings.TrimSpace(stdout)
-				splitted := strings.Split(stdout, ":::")
-				homeDirectory := strings.TrimSuffix(splitted[0], "/")
-				whoami := "unknown"
-				id := "unknown"
-				if len(splitted) >= 2 {
-					whoami = splitted[1]
-				}
-				if len(splitted) >= 3 {
-					id = splitted[2]
-				}
-				userInfo := fmt.Sprintf("id: %v, whoami: %v", color.GreenString(id), color.YellowString(whoami))
-				if homeDirectory == "" {
-					return fmt.Errorf("user (%v) in the image doesn't have home directory", userInfo)
-				}
-				log.Debugf("%v (%v) home directory: %v", logz.LogPod(), color.GreenString(whoami), color.MagentaString(homeDirectory))
+				mErr = nil
+
 				err = internal.Pod.CopyFileToPod(pod, settings.RepositoryConfig, fmt.Sprintf("%v/.config/helm/repositories.yaml", homeDirectory))
 				if err != nil {
 					return err
@@ -121,7 +141,7 @@ func newExecCmd() *cobra.Command {
 			}
 			for _, repo := range opts.UpdateRepo {
 				log.Infof("%v Fetching updates from %v helm repository", logz.LogPod(), color.CyanString(repo))
-				stdout, stderr, err := operatorkclient.RunCommandInPod(fmt.Sprintf("helm repo update %v --fail-on-repo-update-fail", repo), internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+				stdout, stderr, err = operatorkclient.RunCommandInPod(fmt.Sprintf("helm repo update %v --fail-on-repo-update-fail", repo), internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 				if err != nil {
 					return multierr.Append(err, fmt.Errorf("%v\n%v", stdout, stderr))
 				}
@@ -158,7 +178,7 @@ func newExecCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		scriptToRun := "/helm-in-pod/wrapped-script.sh"
+		scriptToRun := fmt.Sprintf("%v/wrapped-script.sh", homeDirectory)
 		since := time.Now()
 		err = internal.Pod.CopyFileToPod(pod, tempScriptFile.Name(), scriptToRun)
 		if err != nil {
