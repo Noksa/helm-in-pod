@@ -8,20 +8,20 @@ import (
 	"time"
 )
 
-func RunCommand(cmd *cobra.Command) (context.Context, error) {
+func RunCommand(cmd *cobra.Command) error {
 	flags := cmd.PersistentFlags()
 	flags.ParseErrorsWhitelist.UnknownFlags = true
 	_ = flags.Parse(os.Args[1:])
 	dur, err := cmd.PersistentFlags().GetDuration("timeout")
 	if err != nil {
-		return ctx, err
+		return err
 	}
 	if dur <= 0 {
 		log.Info("Sets default timeout to 2h")
 		dur = time.Hour * 2
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), dur)
+	defer cancel()
 	err = cmd.ExecuteContext(ctx)
-	cancel()
-	return ctx, err
+	return err
 }

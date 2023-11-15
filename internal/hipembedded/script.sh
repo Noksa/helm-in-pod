@@ -42,6 +42,5 @@ while [ $MY_TIME -lt $END ]; do
 done
 
 #echo "#### EXECUTION STARTED ####"
-sh -eu "${SCRIPT_PATH}" &
-wait
+sh -eu "${SCRIPT_PATH}"
 exit $?

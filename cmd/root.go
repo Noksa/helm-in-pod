@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/helpers"
@@ -43,7 +42,7 @@ func newRootCmd() *cobra.Command {
 	return rootCmd
 }
 
-func ExecuteRoot() (context.Context, error) {
+func ExecuteRoot() error {
 	rootCmd := newRootCmd()
 	rootCmd.SilenceUsage = true
 	return internal.RunCommand(rootCmd)

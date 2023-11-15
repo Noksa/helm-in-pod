@@ -121,7 +121,7 @@ func newExecCmd() *cobra.Command {
 				attempts := 3
 				for i := 0; i < attempts; i++ {
 					log.Debugf("%v Creating %v/.config/helm directory", logz.LogPod(), homeDirectory)
-					stdout, stderr, runCommandErr = operatorkclient.RunCommandInPod(`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null`, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+					_, stderr, runCommandErr = operatorkclient.RunCommandInPod(`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null`, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 					if runCommandErr == nil {
 						mErr = nil
 						break
@@ -192,6 +192,7 @@ func newExecCmd() *cobra.Command {
 
 		go func() {
 			<-execCmd.Context().Done()
+			log.Warnf("%v Timed out!", logz.LogHost())
 			for {
 				_, _, err := operatorkclient.RunCommandInPod("kill -term 1", "helm-in-pod", pod.Name, pod.Namespace, nil)
 				if err == nil {
@@ -203,6 +204,7 @@ func newExecCmd() *cobra.Command {
 
 		wg := sync.WaitGroup{}
 		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
 			for {
@@ -212,7 +214,7 @@ func newExecCmd() *cobra.Command {
 					if client.IgnoreNotFound(err) == nil {
 						return
 					}
-					time.Sleep(time.Millisecond * 50)
+					time.Sleep(time.Millisecond * 25)
 				}
 				if phase == corev1.PodFailed || phase == corev1.PodSucceeded {
 					return
@@ -223,7 +225,7 @@ func newExecCmd() *cobra.Command {
 					return
 				}
 				log.Infof("got an error from streaming pod logs: %v", err)
-				time.Sleep(time.Millisecond * 100)
+				time.Sleep(time.Millisecond * 25)
 			}
 		}()
 		wg.Wait()
@@ -238,14 +240,17 @@ func newExecCmd() *cobra.Command {
 				mErr = nil
 				break
 			}
-			time.Sleep(time.Millisecond * 50)
+			time.Sleep(time.Millisecond * 25)
 		}
 		if mErr != nil {
 			return mErr
 		}
 		log.Debugf("%v Pod got phase: %v", logz.LogHost(), color.CyanString("%v", phase))
 		if phase == corev1.PodFailed {
-			return fmt.Errorf("failed")
+			if cmd.Context().Err() != nil {
+				return cmd.Context().Err()
+			}
+			return fmt.Errorf("pod failed")
 		}
 		if phase == corev1.PodSucceeded {
 			return nil
