@@ -5,6 +5,7 @@ type ExecOptions struct {
 	Files           []string
 	CopyRepo        bool
 	Labels          map[string]string
+	Annotations     map[string]string
 	UpdateRepo      []string
 	Cpu             string
 	Memory          string

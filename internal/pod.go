@@ -93,6 +93,10 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	for k, v := range opts.Labels {
 		labels[k] = v
 	}
+	annotations := map[string]string{}
+	for k, v := range opts.Annotations {
+		annotations[k] = v
+	}
 	securityContext := &corev1.SecurityContext{}
 	if opts.RunAsUser > -1 {
 		securityContext.RunAsUser = gopointer.NewOf(opts.RunAsUser)
@@ -136,8 +140,12 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 		podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{Name: opts.ImagePullSecret})
 	}
 	pod, err := clientSet.CoreV1().Pods(HelmInPodNamespace).Create(ctx, &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{GenerateName: fmt.Sprintf("%v-", HelmInPodNamespace), Labels: labels},
-		Spec:       podSpec,
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: fmt.Sprintf("%v-", HelmInPodNamespace),
+			Labels:       labels,
+			Annotations:  annotations,
+		},
+		Spec: podSpec,
 	}, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
