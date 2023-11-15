@@ -5,7 +5,7 @@ trapMe() {
   TRAP_TIME=0
   TRAP_END_TIME=$((TRAP_TIME+180))
   while [ $TRAP_TIME -lt $TRAP_END_TIME ]; do
-    echo "Sending INT and TERM to all processes except PID 1"
+    #echo "Sending INT and TERM to all processes except PID 1"
     kill -s INT -1 2>/dev/null
     kill -s TERM -1 2>/dev/null
     RES="$(ps aux | grep "${HOME}/wrapped-script.sh" | grep -v "grep" | xargs)"
@@ -16,7 +16,7 @@ trapMe() {
       RES="$(ps aux | grep "kubectl" | grep -v "grep" | xargs)"
     fi
     if [ -z "${RES}" ]; then
-      echo "exiting - no wrapped-script/helm/kubectl processes found"
+      #echo "exiting - no wrapped-script/helm/kubectl processes found"
       exit 1
     fi
     TRAP_TIME=$((TRAP_TIME+3))
@@ -42,5 +42,7 @@ while [ $MY_TIME -lt $END ]; do
 done
 
 #echo "#### EXECUTION STARTED ####"
-sh -eu "${SCRIPT_PATH}"
+"${SCRIPT_PATH}" &
+pid=$!
+wait $pid
 exit $?

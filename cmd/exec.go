@@ -159,7 +159,6 @@ func newExecCmd() *cobra.Command {
 			}
 		}
 		cmdToUse := strings.Join(args, " ")
-
 		tempScriptFile, err := os.CreateTemp("", "helm-in-pod")
 		if err != nil {
 			return err
@@ -175,6 +174,10 @@ func newExecCmd() *cobra.Command {
 			}
 		}()
 
+		_, err = tempScriptFile.WriteString(fmt.Sprintf("set -eu\n"))
+		if err != nil {
+			return err
+		}
 		_, err = tempScriptFile.WriteString(cmdToUse)
 		if err != nil {
 			return err
