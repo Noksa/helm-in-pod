@@ -83,7 +83,7 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	}
 	envVars = append(envVars, corev1.EnvVar{
 		Name:  "TIMEOUT",
-		Value: strconv.Itoa(int(time.Hour * 2)),
+		Value: strconv.Itoa(int(opts.Timeout.Seconds())),
 	})
 	resourceList := corev1.ResourceList{
 		"cpu":    resource.MustParse(opts.Cpu),
@@ -106,7 +106,7 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	}
 	podSpec := corev1.PodSpec{
 		Containers: []corev1.Container{{
-			Name:            "helm-in-pod",
+			Name:            HelmInPodNamespace,
 			ImagePullPolicy: corev1.PullPolicy(opts.PullPolicy),
 			Image:           opts.Image,
 			Command: []string{

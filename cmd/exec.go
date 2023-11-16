@@ -12,6 +12,7 @@ import (
 	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"go.uber.org/multierr"
 	"helm.sh/helm/v3/pkg/cli"
 	"io"
@@ -49,8 +50,10 @@ func newExecCmd() *cobra.Command {
 
 	execCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			return fmt.Errorf("specify command to run. Run `helm inpod exec --help` to check available options")
+			return fmt.Errorf("specify command to run. Run `helm in-pod exec --help` to check available options")
 		}
+		timeout := viper.GetDuration("timeout")
+		opts.Timeout = timeout + time.Minute*10
 		var mErr error
 		defer multierr.AppendInvoke(&mErr, multierr.Invoke(func() error {
 			deferErr := internal.Pod.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
@@ -174,7 +177,7 @@ func newExecCmd() *cobra.Command {
 			}
 		}()
 
-		_, err = tempScriptFile.WriteString(fmt.Sprintf("set -eu\n"))
+		_, err = tempScriptFile.WriteString("set -eu\n")
 		if err != nil {
 			return err
 		}
@@ -234,16 +237,16 @@ func newExecCmd() *cobra.Command {
 		wg.Wait()
 		var phase corev1.PodPhase
 
-		log.Debugf("%v Waiting correct pod phase", logz.LogHost())
+		log.Debugf("%v Waiting 60s until pod phase is changed to failed/succeeded", logz.LogHost())
 		mErr = nil
-		for t := time.Now(); time.Since(t) <= time.Second*5; {
+		for t := time.Now(); time.Since(t) <= time.Second*60; {
 			phase, err = internal.Pod.GetPodPhase(context.Background(), pod)
 			mErr = multierr.Append(mErr, err)
 			if err == nil && phase != corev1.PodRunning {
 				mErr = nil
 				break
 			}
-			time.Sleep(time.Millisecond * 25)
+			time.Sleep(time.Millisecond * 100)
 		}
 		if mErr != nil {
 			return mErr

@@ -6,6 +6,7 @@ import (
 	"github.com/noksa/helm-in-pod/internal/helpers"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"time"
 )
 
@@ -22,7 +23,7 @@ func newRootCmd() *cobra.Command {
 	var debug bool
 	rootCmd.PersistentFlags().BoolVar(&debug, "verbose-logs", false, "Enable debug logs")
 	rootCmd.PersistentFlags().Duration("timeout", time.Second*0, "After timeout a command will be gracefully terminated even if it is still running. Default is 1h")
-
+	_ = viper.BindPFlag("timeout", rootCmd.PersistentFlags().Lookup("timeout"))
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if debug {
 			log.Info("Setting log level to debug")

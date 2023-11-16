@@ -22,6 +22,5 @@ func RunCommand(cmd *cobra.Command) error {
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), dur)
 	defer cancel()
-	err = cmd.ExecuteContext(ctx)
-	return err
+	return cmd.ExecuteContext(ctx)
 }

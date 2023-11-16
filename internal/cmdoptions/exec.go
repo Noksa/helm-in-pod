@@ -1,5 +1,7 @@
 package cmdoptions
 
+import "time"
+
 type ExecOptions struct {
 	Image           string
 	Files           []string
@@ -16,4 +18,7 @@ type ExecOptions struct {
 	RunAsGroup      int64
 	ImagePullSecret string
 	PullPolicy      string
+	// Timeout is duration from --timeout flag + 10 minutes
+	// set internally
+	Timeout time.Duration
 }
