@@ -192,7 +192,7 @@ func (h *HelmPod) waitUntilPodIsRunning(pod *corev1.Pod) error {
 	return mErr
 }
 
-func (h *HelmPod) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string) error {
+func (h *HelmPod) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string, attempts int) error {
 	buffer := &bytes.Buffer{}
 	srcPath = filepath.Clean(srcPath)
 	destPath = filepath.Clean(destPath)
@@ -221,27 +221,33 @@ tar zxf - -C /`, dir)},
 		Stderr: true,
 	}, scheme.ParameterCodec)
 
-	exec, err := remotecommand.NewSPDYExecutor(operatorkclient.GetClientConfig(), "POST", req.URL())
-	if err != nil {
-		return err
-	}
+	var mErr error
+	for i := 1; i <= attempts; i++ {
+		exec, err := remotecommand.NewSPDYExecutor(operatorkclient.GetClientConfig(), "POST", req.URL())
+		if err != nil {
+			mErr = multierr.Append(mErr, err)
+			continue
+		}
 
-	// Create a stream to the container
-	log.Infof("%v %v Copying %v to %v", logz.LogHost(), logz.LogPod(), color.CyanString(srcPath), color.MagentaString(destPath))
-	b := &strings.Builder{}
-	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
-		Stdin:  bytes.NewReader(buffer.Bytes()),
-		Stdout: b,
-		Stderr: b,
-		Tty:    false,
-	})
-	if err != nil {
-		err = multierr.Append(err, fmt.Errorf(b.String()))
-	}
-	if err == nil {
+		// Create a stream to the container
+		log.Infof("%v %v Copying %v to %v [attempt %v]", logz.LogHost(), logz.LogPod(), color.CyanString(srcPath), color.MagentaString(destPath), color.YellowString("#%v", i))
+		b := &strings.Builder{}
+		err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdin:  bytes.NewReader(buffer.Bytes()),
+			Stdout: b,
+			Stderr: b,
+			Tty:    false,
+		})
+		if err != nil {
+			mErr = multierr.Append(mErr, err)
+			mErr = multierr.Append(mErr, fmt.Errorf(b.String()))
+			continue
+		}
 		log.Debugf("%v %v %v has been copied to %v", logz.LogHost(), logz.LogPod(), color.CyanString(srcPath), color.MagentaString(destPath))
+		mErr = nil
+		break
 	}
-	return err
+	return mErr
 }
 
 func (h *HelmPod) StreamLogsFromPod(ctx context.Context, pod *corev1.Pod, writer io.Writer, since time.Time) error {

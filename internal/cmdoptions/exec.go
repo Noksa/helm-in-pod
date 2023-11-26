@@ -20,5 +20,7 @@ type ExecOptions struct {
 	PullPolicy      string
 	// Timeout is duration from --timeout flag + 10 minutes
 	// set internally
-	Timeout time.Duration
+	Timeout            time.Duration
+	CopyAttempts       int
+	UpdateRepoAttempts int
 }

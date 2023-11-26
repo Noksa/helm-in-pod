@@ -44,13 +44,20 @@ func newExecCmd() *cobra.Command {
 	execCmd.Flags().StringVar(&opts.ImagePullSecret, "image-pull-secret", "", "Specify an image pull secret which should be used to pull --image from private repository")
 	execCmd.Flags().BoolVar(&opts.CopyRepo, "copy-repo", true, "Copy existing helm repositories to helm pod")
 	execCmd.Flags().StringVar(&opts.PullPolicy, "pull-policy", "IfNotPresent", "Image pull policy to use in helm pod")
-	execCmd.Flags().StringSliceVar(&opts.UpdateRepo, "update-repo", []string{}, "A list of helm repository aliases which should be updated before running a command. Applicable only if --copy-repo set to true")
+	execCmd.Flags().StringSliceVar(&opts.UpdateRepo, "update-repo", []string{}, "A list of helm repository aliases which should be updated before running a command. Applicable only if --copy-repo set to true. All repositories will be updated if not specified")
 	execCmd.Flags().StringVarP(&opts.Image, "image", "i", "docker.io/noksa/kubectl-helm:v1.25.8-v3.10.3", "An image which will be used. Must contain helm")
 	execCmd.Flags().StringSliceVarP(&opts.Files, "copy", "c", []string{}, "A map of files/directories which should be copied from host to container. Can be specified multiple times. Example: -c /path_on_host/values.yaml:/path_in_container/values.yaml")
-
+	execCmd.Flags().IntVar(&opts.CopyAttempts, "copy-attempts", 3, "Attempts count in each copy action (in copy-repo and copy flags). If your connection to k8s api is no stable, you can try to increase the attempts")
+	execCmd.Flags().IntVar(&opts.UpdateRepoAttempts, "update-repo-attempts", 3, "Attempts count in each helm update repo action. Applicable only if copy-repo set to true")
 	execCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return fmt.Errorf("specify command to run. Run `helm in-pod exec --help` to check available options")
+		}
+		if opts.CopyAttempts < 1 {
+			return fmt.Errorf("copy-attempts value can't be less 1")
+		}
+		if opts.UpdateRepoAttempts < 1 {
+			return fmt.Errorf("update-repo-attempts value can't be less 1")
 		}
 		timeout := viper.GetDuration("timeout")
 		opts.Timeout = timeout + time.Minute*10
@@ -121,8 +128,7 @@ func newExecCmd() *cobra.Command {
 				return statErr
 			}
 			if statErr == nil {
-				attempts := 3
-				for i := 0; i < attempts; i++ {
+				for i := 1; i <= opts.CopyAttempts; i++ {
 					log.Debugf("%v Creating %v/.config/helm directory", logz.LogPod(), homeDirectory)
 					_, stderr, runCommandErr = operatorkclient.RunCommandInPod(`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null`, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 					if runCommandErr == nil {
@@ -138,25 +144,50 @@ func newExecCmd() *cobra.Command {
 				}
 				mErr = nil
 
-				err = internal.Pod.CopyFileToPod(pod, settings.RepositoryConfig, fmt.Sprintf("%v/.config/helm/repositories.yaml", homeDirectory))
+				err = internal.Pod.CopyFileToPod(pod, settings.RepositoryConfig, fmt.Sprintf("%v/.config/helm/repositories.yaml", homeDirectory), opts.CopyAttempts)
 				if err != nil {
 					return err
 				}
 			}
-			for _, repo := range opts.UpdateRepo {
-				log.Infof("%v Fetching updates from %v helm repository", logz.LogPod(), color.CyanString(repo))
-				stdout, stderr, err = operatorkclient.RunCommandInPod(fmt.Sprintf("helm repo update %v --fail-on-repo-update-fail", repo), internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
-				if err != nil {
-					return multierr.Append(err, fmt.Errorf("%v\n%v", stdout, stderr))
+			mErr = nil
+			if len(opts.UpdateRepo) == 0 {
+				for i := 1; i <= opts.UpdateRepoAttempts; i++ {
+					log.Infof("%v Fetching updates from %v helm repositories [attempt %v]", logz.LogPod(), color.GreenString("all"), color.YellowString("#%v", i))
+					stdout, stderr, err = operatorkclient.RunCommandInPod("helm repo update --fail-on-repo-update-fail", internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+					if err == nil {
+						mErr = nil
+						log.Debugf("%v Helm repository updates have been fetched", logz.LogPod())
+						break
+					}
+					mErr = multierr.Append(mErr, err)
+					mErr = multierr.Append(mErr, fmt.Errorf("%v\n%v", stdout, stderr))
+				}
+			} else {
+				for _, repo := range opts.UpdateRepo {
+					for i := 1; i <= opts.UpdateRepoAttempts; i++ {
+						log.Infof("%v Fetching updates from %v helm repository [attempt %v]", logz.LogPod(), color.CyanString(repo), color.YellowString("#%v", i))
+						stdout, stderr, err = operatorkclient.RunCommandInPod(fmt.Sprintf("helm repo update %v --fail-on-repo-update-fail", repo), internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+						if err == nil {
+							mErr = nil
+							log.Debugf("%v %v helm repository updates have been fetched", logz.LogPod(), color.CyanString(repo))
+							break
+						}
+						mErr = multierr.Append(mErr, err)
+						mErr = multierr.Append(mErr, fmt.Errorf("%v\n%v", stdout, stderr))
+					}
 				}
 			}
 		}
+		if mErr != nil {
+			return mErr
+		}
+		mErr = nil
 		for k, v := range opts.FilesAsMap {
 			path, err := expand(k)
 			if err != nil {
 				return err
 			}
-			err = internal.Pod.CopyFileToPod(pod, path, v)
+			err = internal.Pod.CopyFileToPod(pod, path, v, opts.CopyAttempts)
 			if err != nil {
 				return err
 			}
@@ -187,7 +218,7 @@ func newExecCmd() *cobra.Command {
 		}
 		scriptToRun := fmt.Sprintf("%v/wrapped-script.sh", homeDirectory)
 		since := time.Now()
-		err = internal.Pod.CopyFileToPod(pod, tempScriptFile.Name(), scriptToRun)
+		err = internal.Pod.CopyFileToPod(pod, tempScriptFile.Name(), scriptToRun, opts.CopyAttempts)
 		if err != nil {
 			return err
 		}
