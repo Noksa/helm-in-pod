@@ -1,155 +1,211 @@
-# helm-in-pod
+# 🚀 helm-in-pod
 
-### A Helm plugin to run any command (helm/kubectl/etc) inside a k8s cluster
-
----
-
-#### Why?
-
-When `helm` runs its commands, it does it on localhost. If a k8s-cluster is far away from the client, it may take a lot of time (especially if a helm-release is very big and contains a lot of manifests)
-
-This plugin solves this problem - `helm` will be run inside k8s cluster where network latency between client and api is low as possible
-
-However, this plugin can run **any** command in a pod, not only `helm`
+> ⚡ A Helm plugin to run any command (helm/kubectl/etc) inside a Kubernetes cluster
 
 ---
 
-#### Requirements
+## 🤔 Why?
 
-* Helm3 should be installed on host
+<details>
+<summary>📡 <strong>Network Latency Problem</strong></summary>
+
+When `helm` runs commands from your local machine, network latency to distant Kubernetes clusters can significantly slow down operations, especially with large releases containing many manifests.
+
+**helm-in-pod** solves this by running Helm commands directly inside the cluster, minimizing network latency between the client and Kubernetes API.
+
+</details>
+
+### ✨ Key Benefits
+
+| Feature | Description |
+|---------|-------------|
+| 🏃‍♂️ **Fast Execution** | Run commands inside the cluster for minimal latency |
+| 🔧 **Any Command** | Execute helm, kubectl, or any other command |
+| 📦 **Repository Sync** | Automatically copies all host Helm repositories |
+| 📁 **File Transfer** | Copy files/folders from host to pod |
+| 🌍 **Environment Variables** | Set custom environment variables in the pod |
+| 🐳 **Custom Images** | Use any Docker image for execution |
 
 ---
 
-#### How to install/update
+## 📋 Requirements
 
-Run the following command to install/update the plugin.
+- 🎯 **Helm 3** installed on host machine
 
-You can specify any existing version (check releases)
-```shell
+---
+
+## 🚀 Installation
+
+<details>
+<summary>📥 <strong>Quick Install/Update</strong></summary>
+
+```bash
+# Install or update the plugin
 (helm plugin uninstall in-pod || true) && helm plugin install https://github.com/Noksa/helm-in-pod
 ```
 
+> 💡 You can specify any existing version from the releases page
+
+</details>
+
 ---
 
-#### Usage
+## 📖 Usage
 
-The plugin contains several sub-commands which can be obtained by running the following command:
-```shell
+### 🔍 Getting Help
+
+```bash
 helm in-pod --help
 ```
 
-To run helm (or any other) commands inside k8s clusters use `exec|run` sub-command
+### 🎯 Basic Syntax
 
-All commands including their arguments should be passed after `--`
+```bash
+helm in-pod exec [FLAGS] -- "COMMAND"
+```
 
-Before `--` you can pass flags to `exec|run` command
+### 🔧 Available Flags
 
-It is possible to copy any folder/file from host to a pod before running any command
-
-It is possible to set any environment variable in a pod before running any command
-
-It is possible to use custom image (for pod) instead of default one
-
-Check examples to find an appropriate case
-
----
-
-When `exec|run` command is called, the following things happen:
-* A new `helm-in-pod` pod will be created in a kubernetes cluster in `helm-in-pod` namespace
-* All existing helm repositories (including private) on host are copied to the pod (so there is no need to add helm repositories in the pod, they are just blindly copied from host)
-* Updates from specified (using `--update-repo` flag) helm repositories will be fetched
-* Specified directories/files (using `--copy|-c`) will be copied from host to pod
-* Specified command (after `--`) will be run
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--copy` | `-c` | Copy files/folders from host to pod |
+| `--env` | `-e` | Set environment variables |
+| `--subst-env` | `-s` | Substitute environment variables from host |
+| `--image` | `-i` | Use custom Docker image |
+| `--update-repo` | | Update specified Helm repositories |
 
 ---
 
-##### Examples
+## ⚙️ How It Works
 
-* Get all pods
-```shell
+<details>
+<summary>🔄 <strong>Execution Flow</strong></summary>
+
+When you run `helm in-pod exec`, the following happens:
+
+1. 🏗️ **Pod Creation**: Creates a new `helm-in-pod` pod in the `helm-in-pod` namespace
+2. 📚 **Repository Sync**: Copies all existing Helm repositories from host to pod
+3. 🔄 **Repository Updates**: Fetches updates for specified repositories
+4. 📁 **File Transfer**: Copies specified files/directories to the pod
+5. ▶️ **Command Execution**: Runs your specified command inside the pod
+
+</details>
+
+---
+
+## 💡 Examples
+
+### 🔍 Basic Operations
+
+<details>
+<summary><strong>Get all pods</strong></summary>
+
+```bash
 helm in-pod exec -- "kubectl get pods -A"
 ```
 
-* List all helm releases
-```shell
+</details>
+
+<details>
+<summary><strong>List Helm releases</strong></summary>
+
+```bash
 helm in-pod exec -- "helm list -A"
 ```
 
-* Install bitnami nginx from a pod without custom values file
-```shell
-# Add bitnami repo on host first
-helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
-# Install nginx using a pod in a k8s cluster
-# 'helm' is omitted in arguments because it is called automatically
-# So, just pass arguments to 'helm' command after '--'
+</details>
 
-helm in-pod exec --update-repo bitnami -- "helm install -n bitnami-nginx --create-namespace bitnami/nginx nginx"
+### 📦 Installing Charts
+
+<details>
+<summary><strong>Simple installation</strong></summary>
+
+```bash
+# Add repository on host
+helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
+
+# Install from pod
+helm in-pod exec --update-repo bitnami -- \
+  "helm install -n bitnami-nginx --create-namespace bitnami/nginx nginx"
 ```
 
-* Install/upgrade bitnami nginx from a pod **with custom values file**
-```shell
+</details>
+
+<details>
+<summary><strong>Installation with custom values</strong></summary>
+
+```bash
 helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
-# Note that we use --copy flag to copy custom values file from host to a pod using specific path
-# In '--values|-f' flag in helm we should specify path in the pod (NOT ON HOST) where we copied the file in '--copy' flag 
-helm in-pod exec --copy /home/alexandr/bitnami/nginx_values.yaml:/tmp/nginx_values.yaml \
---update-repo bitnami -- "helm upgrade -i -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml"
+
+# Copy values file and install
+helm in-pod exec \
+  --copy /home/alexandr/bitnami/nginx_values.yaml:/tmp/nginx_values.yaml \
+  --update-repo bitnami -- \
+  "helm upgrade -i -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml"
 ```
 
-* Install/upgrade bitnami nginx from a pod **with custom values file** and **sql** backend for helm releases
-```shell
-helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
-# Note that we use '--env|-e' flag to set environment variables in a container with helm
-# to use SQL backend instead of secrets  
-helm in-pod exec -e "HELM_DRIVER=sql" \
--e "HELM_DRIVER_SQL_CONNECTION_STRING=postgresql://helmpostgres.helmpostgres:5432/db?user=user&password=password" \
---copy /home/alexandr/bitnami/nginx_values.yaml:/tmp/nginx_values.yaml \
---update-repo bitnami -- "helm upgrade -i -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml"
+> ⚠️ **Important**: Use the pod path (`/tmp/nginx_values.yaml`) in the helm command, not the host path
+
+</details>
+
+### 🗄️ SQL Backend Configuration
+
+<details>
+<summary><strong>Using environment variables</strong></summary>
+
+```bash
+helm in-pod exec \
+  -e "HELM_DRIVER=sql" \
+  -e "HELM_DRIVER_SQL_CONNECTION_STRING=postgresql://helmpostgres.helmpostgres:5432/db?user=user&password=password" \
+  --copy /home/alexandr/bitnami/nginx_values.yaml:/tmp/nginx_values.yaml \
+  --update-repo bitnami -- \
+  "helm upgrade -i -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml"
 ```
 
-* Install/upgrade bitnami nginx from a pod **with custom values file** and **sql** backend for helm releases
-```shell
-helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
-# Note that we use '--env|-e' flag to set environment variables in a container with helm
-# to use SQL backend instead of secrets  
-helm in-pod exec -e "HELM_DRIVER=sql" \
--e "HELM_DRIVER_SQL_CONNECTION_STRING=postgresql://helmpostgres.helmpostgres:5432/db?user=user&password=password" \
---copy /home/alexandr/bitnami/nginx_values.yaml:/tmp/nginx_values.yaml \
---update-repo bitnami -- "helm upgrade -i -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml"
-```
+</details>
 
-* Install/upgrade bitnami nginx from a pod **with custom values file** and **sql** backend for helm releases but substitute env values from host 
-```shell
-helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
-# Note that we use '--subst-env|-s' flag to add environment variables with values from host in a container with helm
-# to use SQL backend instead of secrets
+<details>
+<summary><strong>Using host environment substitution</strong></summary>
+
+```bash
+# Set environment variables on host
 export HELM_DRIVER=sql
-export HELM_DRIVER_SQL_CONNECTION_STRING=postgresql://helmpostgres.helmpostgres:5432/db?user=user&password=password  
-helm in-pod exec -s "HELM_DRIVER,HELM_DRIVER_SQL_CONNECTION_STRING" \
---copy /home/alexandr/bitnami/nginx_values.yaml:/tmp/nginx_values.yaml \
---update-repo bitnami -- "helm upgrade -i -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml"
+export HELM_DRIVER_SQL_CONNECTION_STRING=postgresql://helmpostgres.helmpostgres:5432/db?user=user&password=password
+
+# Use them in pod
+helm in-pod exec \
+  -s "HELM_DRIVER,HELM_DRIVER_SQL_CONNECTION_STRING" \
+  --copy /home/alexandr/bitnami/nginx_values.yaml:/tmp/nginx_values.yaml \
+  --update-repo bitnami -- \
+  "helm upgrade -i -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml"
 ```
 
-* Run helm diff **with custom values file**
-```shell
-helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
-# Note that we use '--env|-e' flag to set helm diff environment variables in a container with helm
-# to change diff default behaviour  
-helm in-pod exec -e "HELM_DIFF_NORMALIZE_MANIFESTS=true,HELM_DIFF_USE_UPGRADE_DRY_RUN=true,HELM_DIFF_THREE_WAY_MERGE=true" \
---copy /home/alexandr/bitnami/nginx_values.yaml:/tmp/nginx_values.yaml \
---update-repo bitnami -- "helm diff upgrade -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml"
+</details>
+
+### 🔍 Advanced Operations
+
+<details>
+<summary><strong>Helm diff with custom configuration</strong></summary>
+
+```bash
+helm in-pod exec \
+  -e "HELM_DIFF_NORMALIZE_MANIFESTS=true,HELM_DIFF_USE_UPGRADE_DRY_RUN=true,HELM_DIFF_THREE_WAY_MERGE=true" \
+  --copy /home/alexandr/bitnami/nginx_values.yaml:/tmp/nginx_values.yaml \
+  --update-repo bitnami -- \
+  "helm diff upgrade -n bitnami-nginx --create-namespace bitnami/nginx nginx -f /tmp/nginx_values.yaml"
 ```
 
-* Run kubectl inside k8s
-```shell
-helm in-pod exec -- "kubectl get pods -A"
+</details>
+
+<details>
+<summary><strong>Custom Docker images</strong></summary>
+
+```bash
+# Specific Helm version
+helm in-pod exec -i "alpine/helm:3.12.1" -- "helm list -A"
+
+# Custom image with additional tools
+helm in-pod exec -i "alpine:3.18" -- "apk add curl --no-cache && curl google.com"
 ```
 
-* Use custom image with specific `helm` version
-```shell
-helm in-pod exec -i "alpine/helm:3.12.1" -- "helm list -A" 
-```
-
-* Use custom image and run any command
-```shell
-helm in-pod exec -i "alpine:3.18" -- "apk add curl --no-cache && curl google.com" 
-```
+</details>
