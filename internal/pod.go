@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
+	"maps"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -90,13 +91,9 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 		"memory": resource.MustParse(opts.Memory),
 	}
 	labels := map[string]string{"host": myHostname}
-	for k, v := range opts.Labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, opts.Labels)
 	annotations := map[string]string{}
-	for k, v := range opts.Annotations {
-		annotations[k] = v
-	}
+	maps.Copy(annotations, opts.Annotations)
 	securityContext := &corev1.SecurityContext{}
 	if opts.RunAsUser > -1 {
 		securityContext.RunAsUser = gopointer.NewOf(opts.RunAsUser)

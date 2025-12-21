@@ -17,14 +17,14 @@ When `helm` runs commands from your local machine, network latency to distant Ku
 
 ### ✨ Key Benefits
 
-| Feature | Description |
-|---------|-------------|
-| 🏃‍♂️ **Fast Execution** | Run commands inside the cluster for minimal latency |
-| 🔧 **Any Command** | Execute helm, kubectl, or any other command |
-| 📦 **Repository Sync** | Automatically copies all host Helm repositories |
-| 📁 **File Transfer** | Copy files/folders from host to pod |
-| 🌍 **Environment Variables** | Set custom environment variables in the pod |
-| 🐳 **Custom Images** | Use any Docker image for execution |
+| Feature                      | Description                                         |
+|------------------------------|-----------------------------------------------------|
+| 🏃‍♂️ **Fast Execution**     | Run commands inside the cluster for minimal latency |
+| 🔧 **Any Command**           | Execute helm, kubectl, or any other command         |
+| 📦 **Repository Sync**       | Automatically copies all host Helm repositories     |
+| 📁 **File Transfer**         | Copy files/folders from host to pod                 |
+| 🌍 **Environment Variables** | Set custom environment variables in the pod         |
+| 🐳 **Custom Images**         | Use any Docker image for execution                  |
 
 ---
 
@@ -41,7 +41,7 @@ When `helm` runs commands from your local machine, network latency to distant Ku
 
 ```bash
 # Install or update the plugin
-(helm plugin uninstall in-pod || true) && helm plugin install https://github.com/Noksa/helm-in-pod
+(helm plugin uninstall in-pod || true) && helm plugin install --verify=false https://github.com/Noksa/helm-in-pod
 ```
 
 > 💡 You can specify any existing version from the releases page
@@ -66,13 +66,13 @@ helm in-pod exec [FLAGS] -- "COMMAND"
 
 ### 🔧 Available Flags
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--copy` | `-c` | Copy files/folders from host to pod |
-| `--env` | `-e` | Set environment variables |
-| `--subst-env` | `-s` | Substitute environment variables from host |
-| `--image` | `-i` | Use custom Docker image |
-| `--update-repo` | | Update specified Helm repositories |
+| Flag            | Short | Description                                |
+|-----------------|-------|--------------------------------------------|
+| `--copy`        | `-c`  | Copy files/folders from host to pod        |
+| `--env`         | `-e`  | Set environment variables                  |
+| `--subst-env`   | `-s`  | Substitute environment variables from host |
+| `--image`       | `-i`  | Use custom Docker image                    |
+| `--update-repo` |       | Update specified Helm repositories         |
 
 ---
 

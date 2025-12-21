@@ -5,25 +5,27 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"os/user"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/helpers"
 	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/multierr"
-	"helm.sh/helm/v3/pkg/cli"
-	"io"
+	"helm.sh/helm/v4/pkg/cli"
 	corev1 "k8s.io/api/core/v1"
-	"os"
-	"os/user"
-	"path/filepath"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
-	"sync"
-	"time"
 )
 
 func newExecCmd() *cobra.Command {
@@ -45,7 +47,7 @@ func newExecCmd() *cobra.Command {
 	execCmd.Flags().BoolVar(&opts.CopyRepo, "copy-repo", true, "Copy existing helm repositories to helm pod")
 	execCmd.Flags().StringVar(&opts.PullPolicy, "pull-policy", "IfNotPresent", "Image pull policy to use in helm pod")
 	execCmd.Flags().StringSliceVar(&opts.UpdateRepo, "update-repo", []string{}, "A list of helm repository aliases which should be updated before running a command. Applicable only if --copy-repo set to true. All repositories will be updated if not specified")
-	execCmd.Flags().StringVarP(&opts.Image, "image", "i", "docker.io/noksa/kubectl-helm:v1.25.8-v3.10.3", "An image which will be used. Must contain helm")
+	execCmd.Flags().StringVarP(&opts.Image, "image", "i", "docker.io/noksa/kubectl-helm:v1.34.2-v4.0.4", "An image which will be used")
 	execCmd.Flags().StringSliceVarP(&opts.Files, "copy", "c", []string{}, "A map of files/directories which should be copied from host to container. Can be specified multiple times. Example: -c /path_on_host/values.yaml:/path_in_container/values.yaml")
 	execCmd.Flags().IntVar(&opts.CopyAttempts, "copy-attempts", 3, "Attempts count in each copy action (in copy-repo and copy flags). If your connection to k8s api is no stable, you can try to increase the attempts")
 	execCmd.Flags().IntVar(&opts.UpdateRepoAttempts, "update-repo-attempts", 3, "Attempts count in each helm update repo action. Applicable only if copy-repo set to true")
@@ -69,8 +71,8 @@ func newExecCmd() *cobra.Command {
 		if len(opts.Files) > 0 {
 			opts.FilesAsMap = map[string]string{}
 			for _, val := range opts.Files {
-				entries := strings.Split(val, ",")
-				for _, v := range entries {
+				entries := strings.SplitSeq(val, ",")
+				for v := range entries {
 					splitted := strings.Split(v, ":")
 					opts.FilesAsMap[splitted[0]] = splitted[1]
 				}
@@ -88,7 +90,7 @@ func newExecCmd() *cobra.Command {
 		attempts := 3
 		var runCommandErr error
 		var stdout, stderr string
-		for i := 0; i < attempts; i++ {
+		for range attempts {
 			log.Debugf("%v Determining user home directory", logz.LogPod())
 			stdout, stderr, runCommandErr = operatorkclient.RunCommandInPod(`echo "${HOME}:::$(whoami):::$(id)"`, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 			if runCommandErr == nil {
@@ -103,6 +105,10 @@ func newExecCmd() *cobra.Command {
 			return mErr
 		}
 		mErr = nil
+		isHelm4, err := helpers.IsHelm4(pod.Name, pod.Namespace)
+		if err != nil {
+			return err
+		}
 		stdout = strings.TrimSpace(stdout)
 		splitted := strings.Split(stdout, ":::")
 		homeDirectory := strings.TrimSuffix(splitted[0], "/")
@@ -153,7 +159,11 @@ func newExecCmd() *cobra.Command {
 			if len(opts.UpdateRepo) == 0 {
 				for i := 1; i <= opts.UpdateRepoAttempts; i++ {
 					log.Infof("%v Fetching updates from %v helm repositories [attempt %v]", logz.LogPod(), color.GreenString("all"), color.YellowString("#%v", i))
-					stdout, stderr, err = operatorkclient.RunCommandInPod("helm repo update --fail-on-repo-update-fail", internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+					cmdToUse := "helm repo update"
+					if !isHelm4 {
+						cmdToUse = fmt.Sprintf("%v --fail-on-repo-update-fail", cmdToUse)
+					}
+					stdout, stderr, err = operatorkclient.RunCommandInPod(cmdToUse, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 					if err == nil {
 						mErr = nil
 						log.Debugf("%v Helm repository updates have been fetched", logz.LogPod())
@@ -166,7 +176,11 @@ func newExecCmd() *cobra.Command {
 				for _, repo := range opts.UpdateRepo {
 					for i := 1; i <= opts.UpdateRepoAttempts; i++ {
 						log.Infof("%v Fetching updates from %v helm repository [attempt %v]", logz.LogPod(), color.CyanString(repo), color.YellowString("#%v", i))
-						stdout, stderr, err = operatorkclient.RunCommandInPod(fmt.Sprintf("helm repo update %v --fail-on-repo-update-fail", repo), internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+						cmdToUse := fmt.Sprintf("helm repo update %v", repo)
+						if !isHelm4 {
+							cmdToUse = fmt.Sprintf("%v --fail-on-repo-update-fail", cmdToUse)
+						}
+						stdout, stderr, err = operatorkclient.RunCommandInPod(cmdToUse, internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 						if err == nil {
 							mErr = nil
 							log.Debugf("%v %v helm repository updates have been fetched", logz.LogPod(), color.CyanString(repo))
@@ -240,10 +254,8 @@ func newExecCmd() *cobra.Command {
 		}()
 
 		wg := sync.WaitGroup{}
-		wg.Add(1)
 
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				// use context.Background here
 				phase, err := internal.Pod.GetPodPhase(context.Background(), pod)
@@ -264,7 +276,7 @@ func newExecCmd() *cobra.Command {
 				log.Infof("got an error from streaming pod logs: %v", err)
 				time.Sleep(time.Millisecond * 25)
 			}
-		}()
+		})
 		wg.Wait()
 		var phase corev1.PodPhase
 
