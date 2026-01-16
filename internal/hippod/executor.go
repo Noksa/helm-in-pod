@@ -1,4 +1,4 @@
-package cmd
+package hippod
 
 import (
 	"bytes"
@@ -13,8 +13,8 @@ import (
 
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/fatih/color"
-	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/hipretry"
 	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
 	"go.uber.org/multierr"
@@ -23,22 +23,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type podUserInfo struct {
-	homeDirectory string
-	whoami        string
-	id            string
+type UserInfo struct {
+	HomeDirectory string
+	Whoami        string
+	ID            string
 }
 
-func getPodUserInfo(pod *corev1.Pod) (*podUserInfo, error) {
+func (m *Manager) GetPodUserInfo(pod *corev1.Pod) (*UserInfo, error) {
 	var stdout string
 
-	err := internal.Retry(3, func() error {
+	err := hipretry.Retry(3, func() error {
 		log.Debugf("%v Determining user home directory", logz.LogPod())
 		var stderr string
 		var err error
 		stdout, stderr, err = operatorkclient.RunCommandInPod(
 			`echo "${HOME}:::$(whoami):::$(id)"`,
-			internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+			Namespace, pod.Name, pod.Namespace, nil)
 		if err != nil {
 			return multierr.Append(fmt.Errorf("%s", stderr), err)
 		}
@@ -66,14 +66,14 @@ func getPodUserInfo(pod *corev1.Pod) (*podUserInfo, error) {
 	}
 
 	log.Debugf("%v (%v) home directory: %v", logz.LogPod(), color.GreenString(whoami), color.MagentaString(homeDirectory))
-	return &podUserInfo{
-		homeDirectory: homeDirectory,
-		whoami:        whoami,
-		id:            id,
+	return &UserInfo{
+		HomeDirectory: homeDirectory,
+		Whoami:        whoami,
+		ID:            id,
 	}, nil
 }
 
-func syncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, homeDirectory string, isHelm4 bool) error {
+func (m *Manager) SyncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, homeDirectory string, isHelm4 bool) error {
 	settings := cli.New()
 	_, statErr := os.Stat(settings.RepositoryConfig)
 	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
@@ -83,11 +83,11 @@ func syncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, homeDire
 		return nil
 	}
 
-	err := internal.Retry(opts.CopyAttempts, func() error {
+	err := hipretry.Retry(opts.CopyAttempts, func() error {
 		log.Debugf("%v Creating %v/.config/helm directory", logz.LogPod(), homeDirectory)
 		_, stderr, err := operatorkclient.RunCommandInPod(
 			`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null`,
-			internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+			Namespace, pod.Name, pod.Namespace, nil)
 		if err != nil {
 			return multierr.Append(fmt.Errorf("%s", stderr), err)
 		}
@@ -97,25 +97,25 @@ func syncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, homeDire
 		return err
 	}
 
-	err = internal.Pod.CopyFileToPod(pod, settings.RepositoryConfig,
+	err = m.CopyFileToPod(pod, settings.RepositoryConfig,
 		fmt.Sprintf("%v/.config/helm/repositories.yaml", homeDirectory), opts.CopyAttempts)
 	if err != nil {
 		return err
 	}
 
-	return updateHelmRepositories(pod, opts, isHelm4)
+	return m.updateHelmRepositories(pod, opts, isHelm4)
 }
 
-func updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, isHelm4 bool) error {
+func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, isHelm4 bool) error {
 	if len(opts.UpdateRepo) == 0 {
-		return internal.Retry(opts.UpdateRepoAttempts, func() error {
+		return hipretry.Retry(opts.UpdateRepoAttempts, func() error {
 			log.Infof("%v Fetching updates from %v helm repositories", logz.LogPod(), color.GreenString("all"))
 			cmdToUse := "helm repo update"
 			if !isHelm4 {
 				cmdToUse = fmt.Sprintf("%v --fail-on-repo-update-fail", cmdToUse)
 			}
 			stdout, stderr, err := operatorkclient.RunCommandInPod(cmdToUse,
-				internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+				Namespace, pod.Name, pod.Namespace, nil)
 			if err != nil {
 				return multierr.Append(err, fmt.Errorf("%v\n%v", stdout, stderr))
 			}
@@ -126,14 +126,14 @@ func updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, isHelm
 
 	var mErr error
 	for _, repo := range opts.UpdateRepo {
-		err := internal.Retry(opts.UpdateRepoAttempts, func() error {
+		err := hipretry.Retry(opts.UpdateRepoAttempts, func() error {
 			log.Infof("%v Fetching updates from %v helm repository", logz.LogPod(), color.CyanString(repo))
 			cmdToUse := fmt.Sprintf("helm repo update %v", repo)
 			if !isHelm4 {
 				cmdToUse = fmt.Sprintf("%v --fail-on-repo-update-fail", cmdToUse)
 			}
 			stdout, stderr, err := operatorkclient.RunCommandInPod(cmdToUse,
-				internal.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+				Namespace, pod.Name, pod.Namespace, nil)
 			if err != nil {
 				return multierr.Append(err, fmt.Errorf("%v\n%v", stdout, stderr))
 			}
@@ -147,13 +147,13 @@ func updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, isHelm
 	return mErr
 }
 
-func copyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions) error {
+func (m *Manager) CopyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions, expandPath func(string) (string, error)) error {
 	for k, v := range opts.FilesAsMap {
-		path, err := expand(k)
+		path, err := expandPath(k)
 		if err != nil {
 			return err
 		}
-		err = internal.Pod.CopyFileToPod(pod, path, v, opts.CopyAttempts)
+		err = m.CopyFileToPod(pod, path, v, opts.CopyAttempts)
 		if err != nil {
 			return err
 		}
@@ -161,44 +161,10 @@ func copyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions) error {
 	return nil
 }
 
-func prepareCommandScript(command string, homeDirectory string, opts cmdoptions.ExecOptions) (string, error) {
-	tempScriptFile, err := os.CreateTemp("", "helm-in-pod")
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		_ = tempScriptFile.Close()
-	}()
-
-	err = os.Chmod(tempScriptFile.Name(), os.ModePerm)
-	if err != nil {
-		return "", err
-	}
-
-	_, err = tempScriptFile.WriteString("set -eu\n")
-	if err != nil {
-		return "", err
-	}
-	_, err = tempScriptFile.WriteString(command)
-	if err != nil {
-		return "", err
-	}
-
-	scriptToRun := fmt.Sprintf("%v/wrapped-script.sh", homeDirectory)
-	return scriptToRun, nil
-}
-
-func executeCommand(ctx context.Context, pod *corev1.Pod, command string, homeDirectory string, opts cmdoptions.ExecOptions) error {
-	scriptPath, err := prepareCommandScript(command, homeDirectory, opts)
-	if err != nil {
-		return err
-	}
+func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command string, homeDirectory string, opts cmdoptions.ExecOptions) error {
+	scriptPath := fmt.Sprintf("%v/wrapped-script.sh", homeDirectory)
 
 	tempScriptFile, err := os.CreateTemp("", "helm-in-pod")
-	if err != nil {
-		return err
-	}
-	err = os.Chmod(tempScriptFile.Name(), os.ModePerm)
 	if err != nil {
 		return err
 	}
@@ -206,6 +172,11 @@ func executeCommand(ctx context.Context, pod *corev1.Pod, command string, homeDi
 		_ = tempScriptFile.Close()
 		_ = os.RemoveAll(tempScriptFile.Name())
 	}()
+
+	err = os.Chmod(tempScriptFile.Name(), os.ModePerm)
+	if err != nil {
+		return err
+	}
 
 	_, err = tempScriptFile.WriteString("set -eu\n")
 	if err != nil {
@@ -217,7 +188,7 @@ func executeCommand(ctx context.Context, pod *corev1.Pod, command string, homeDi
 	}
 
 	since := time.Now()
-	err = internal.Pod.CopyFileToPod(pod, tempScriptFile.Name(), scriptPath, opts.CopyAttempts)
+	err = m.CopyFileToPod(pod, tempScriptFile.Name(), scriptPath, opts.CopyAttempts)
 	if err != nil {
 		return err
 	}
@@ -243,7 +214,7 @@ func executeCommand(ctx context.Context, pod *corev1.Pod, command string, homeDi
 	wg := sync.WaitGroup{}
 	wg.Go(func() {
 		for {
-			phase, err := internal.Pod.GetPodPhase(context.Background(), pod)
+			phase, err := m.GetPodPhase(context.Background(), pod)
 			if err != nil {
 				if client.IgnoreNotFound(err) == nil {
 					return
@@ -254,7 +225,7 @@ func executeCommand(ctx context.Context, pod *corev1.Pod, command string, homeDi
 			if phase == corev1.PodFailed || phase == corev1.PodSucceeded {
 				return
 			}
-			err = internal.Pod.StreamLogsFromPod(context.Background(), pod, multiWriter, since)
+			err = m.StreamLogsFromPod(context.Background(), pod, multiWriter, since)
 			since = time.Now()
 			if err == nil {
 				return
@@ -265,10 +236,10 @@ func executeCommand(ctx context.Context, pod *corev1.Pod, command string, homeDi
 	})
 	wg.Wait()
 
-	return waitForPodCompletion(ctx, pod)
+	return m.waitForPodCompletion(ctx, pod)
 }
 
-func waitForPodCompletion(ctx context.Context, pod *corev1.Pod) error {
+func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) error {
 	log.Debugf("%v Waiting 60s until pod phase is changed to failed/succeeded", logz.LogHost())
 
 	timeout := time.Second * 60
@@ -277,7 +248,7 @@ func waitForPodCompletion(ctx context.Context, pod *corev1.Pod) error {
 
 	for time.Since(start) <= timeout {
 		var err error
-		phase, err = internal.Pod.GetPodPhase(context.Background(), pod)
+		phase, err = m.GetPodPhase(context.Background(), pod)
 		if err == nil && phase != corev1.PodRunning {
 			break
 		}

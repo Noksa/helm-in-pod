@@ -86,7 +86,7 @@ func newExecCmd() *cobra.Command {
 		}
 
 		// Get pod user info
-		userInfo, err := getPodUserInfo(pod)
+		userInfo, err := internal.Pod.GetPodUserInfo(pod)
 		if err != nil {
 			return err
 		}
@@ -108,21 +108,21 @@ func newExecCmd() *cobra.Command {
 
 		// Sync helm repositories if needed
 		if opts.CopyRepo && helmFound {
-			err = syncHelmRepositories(pod, opts, userInfo.homeDirectory, isHelm4)
+			err = internal.Pod.SyncHelmRepositories(pod, opts, userInfo.HomeDirectory, isHelm4)
 			if err != nil {
 				return err
 			}
 		}
 
 		// Copy user files
-		err = copyUserFiles(pod, opts)
+		err = internal.Pod.CopyUserFiles(pod, opts, expand)
 		if err != nil {
 			return err
 		}
 
 		// Execute command
 		cmdToUse := strings.Join(args, " ")
-		return executeCommand(cmd.Context(), pod, cmdToUse, userInfo.homeDirectory, opts)
+		return internal.Pod.ExecuteCommand(cmd.Context(), pod, cmdToUse, userInfo.HomeDirectory, opts)
 	}
 	return execCmd
 }

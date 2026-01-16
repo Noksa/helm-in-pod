@@ -1,4 +1,4 @@
-package internal
+package hipretry
 
 import (
 	"time"
@@ -6,11 +6,11 @@ import (
 	"go.uber.org/multierr"
 )
 
-// RetryFunc is a function that can be retried
-type RetryFunc func() error
+// Func is a function that can be retried
+type Func func() error
 
 // Retry executes fn up to maxAttempts times, sleeping between attempts
-func Retry(maxAttempts int, fn RetryFunc) error {
+func Retry(maxAttempts int, fn Func) error {
 	var mErr error
 	for i := 1; i <= maxAttempts; i++ {
 		err := fn()

@@ -1,4 +1,4 @@
-package internal
+package hippod
 
 import (
 	"fmt"
@@ -48,7 +48,7 @@ func buildPodSpec(opts cmdoptions.ExecOptions) (corev1.PodSpec, error) {
 
 	podSpec := corev1.PodSpec{
 		Containers: []corev1.Container{{
-			Name:            HelmInPodNamespace,
+			Name:            Namespace,
 			ImagePullPolicy: corev1.PullPolicy(opts.PullPolicy),
 			Image:           opts.Image,
 			Command:         []string{"sh", "-cue"},
@@ -73,7 +73,7 @@ func buildPodSpec(opts cmdoptions.ExecOptions) (corev1.PodSpec, error) {
 			},
 		}},
 		RestartPolicy:                 corev1.RestartPolicyNever,
-		ServiceAccountName:            HelmInPodNamespace,
+		ServiceAccountName:            Namespace,
 		AutomountServiceAccountToken:  gopointer.NewOf(true),
 		TerminationGracePeriodSeconds: gopointer.NewOf[int64](300),
 	}

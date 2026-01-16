@@ -2,21 +2,24 @@ package internal
 
 import (
 	"context"
-	"github.com/Noksa/operator-home/pkg/operatorkclient"
-	"k8s.io/client-go/kubernetes"
 	"os"
+
+	"github.com/Noksa/operator-home/pkg/operatorkclient"
+	"github.com/noksa/helm-in-pod/internal/hipns"
+	"github.com/noksa/helm-in-pod/internal/hippod"
+	"k8s.io/client-go/kubernetes"
 )
 
 var (
-	clientSet  = kubernetes.NewForConfigOrDie(operatorkclient.GetClientConfig())
-	ctx        context.Context
-	cancel     context.CancelFunc
-	Namespace  HelmPodNamespace
-	Pod        HelmPod
-	myHostname string
+	Namespace *hipns.Manager
+	Pod       *hippod.Manager
 )
 
 func init() {
-	hostName, _ := os.Hostname()
-	myHostname = hostName
+	clientSet := kubernetes.NewForConfigOrDie(operatorkclient.GetClientConfig())
+	hostname, _ := os.Hostname()
+	ctx := context.Background()
+
+	Namespace = hipns.NewManager(clientSet, ctx)
+	Pod = hippod.NewManager(clientSet, ctx, hostname)
 }
