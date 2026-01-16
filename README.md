@@ -75,6 +75,7 @@ helm in-pod exec [FLAGS] -- "COMMAND"
 | `--update-repo`   |       | Update specified Helm repositories         |
 | `--tolerations`   |       | Pod tolerations for node taints            |
 | `--node-selector` |       | Pod node selectors for node targeting      |
+| `--host-network`  |       | Use host network in pod                    |
 
 ---
 
@@ -185,6 +186,22 @@ helm in-pod exec \
 </details>
 
 ### 🔍 Advanced Operations
+
+<details>
+<summary><strong>Using host network</strong></summary>
+
+```bash
+# Run with host network for network troubleshooting
+helm in-pod exec --host-network -- "kubectl get pods -A"
+
+# Access services on host network
+helm in-pod exec --host-network -- "curl http://localhost:6443"
+
+# Test DNS from host perspective
+helm in-pod exec --host-network -- "nslookup kubernetes.default.svc.cluster.local"
+```
+
+</details>
 
 <details>
 <summary><strong>Running on tainted nodes</strong></summary>
