@@ -66,14 +66,15 @@ helm in-pod exec [FLAGS] -- "COMMAND"
 
 ### 🔧 Available Flags
 
-| Flag            | Short | Description                                |
-|-----------------|-------|--------------------------------------------|
-| `--copy`        | `-c`  | Copy files/folders from host to pod        |
-| `--env`         | `-e`  | Set environment variables                  |
-| `--subst-env`   | `-s`  | Substitute environment variables from host |
-| `--image`       | `-i`  | Use custom Docker image                    |
-| `--update-repo` |       | Update specified Helm repositories         |
-| `--tolerations` |       | Pod tolerations for node taints            |
+| Flag              | Short | Description                                |
+|-------------------|-------|--------------------------------------------|
+| `--copy`          | `-c`  | Copy files/folders from host to pod        |
+| `--env`           | `-e`  | Set environment variables                  |
+| `--subst-env`     | `-s`  | Substitute environment variables from host |
+| `--image`         | `-i`  | Use custom Docker image                    |
+| `--update-repo`   |       | Update specified Helm repositories         |
+| `--tolerations`   |       | Pod tolerations for node taints            |
+| `--node-selector` |       | Pod node selectors for node targeting      |
 
 ---
 
@@ -202,6 +203,30 @@ helm in-pod exec --tolerations "key=value:NoSchedule:Equal" -- "helm list -A"
 helm in-pod exec \
   --tolerations "node-role.kubernetes.io/control-plane=:NoSchedule:Exists" \
   --tolerations "dedicated=special:NoExecute:Equal" -- \
+  "helm list -A"
+```
+
+</details>
+
+<details>
+<summary><strong>Targeting specific nodes with node selectors</strong></summary>
+
+```bash
+# Run on nodes with specific label
+helm in-pod exec --node-selector "disktype=ssd" -- "helm list -A"
+
+# Run on control plane nodes (empty value)
+helm in-pod exec --node-selector "node-role.kubernetes.io/control-plane=" -- "helm list -A"
+
+# Multiple node selectors
+helm in-pod exec \
+  --node-selector "disktype=ssd,environment=production" -- \
+  "helm list -A"
+
+# Combine with tolerations for control plane
+helm in-pod exec \
+  --node-selector "node-role.kubernetes.io/control-plane=" \
+  --tolerations "node-role.kubernetes.io/control-plane=:NoSchedule:Exists" -- \
   "helm list -A"
 ```
 

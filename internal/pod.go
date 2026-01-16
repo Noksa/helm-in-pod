@@ -72,6 +72,7 @@ func parseToleration(s string) (corev1.Toleration, error) {
 }
 
 type HelmPod struct {
+	interrupted bool
 }
 
 func (h *HelmPod) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOptions cmdoptions.PurgeOptions) error {
@@ -90,11 +91,12 @@ func (h *HelmPod) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOption
 		return err
 	}
 	for _, pod := range pods.Items {
-		log.Debugf("%v Removing '%v' pod", logz.LogHost(), pod.Name)
+		log.Debugf("%v Deleting '%v' pod", logz.LogHost(), pod.Name)
 		err = clientSet.CoreV1().Pods(HelmInPodNamespace).Delete(context.Background(), pod.Name, metav1.DeleteOptions{})
 		if err != nil {
 			return err
 		}
+		log.Debugf("%v '%v' pod has been deleted", logz.LogHost(), pod.Name)
 	}
 	return nil
 }
@@ -188,6 +190,9 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 		}
 		podSpec.Tolerations = append(podSpec.Tolerations, toleration)
 	}
+	if len(opts.NodeSelector) > 0 {
+		podSpec.NodeSelector = opts.NodeSelector
+	}
 	pod, err := clientSet.CoreV1().Pods(HelmInPodNamespace).Create(ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("%v-", HelmInPodNamespace),
@@ -210,6 +215,7 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 			if destroyErr != nil {
 				log.Errorf("Couldn't destroy helm pods: %v", destroyErr.Error())
 			}
+			h.interrupted = true
 		}
 		<-c
 		os.Exit(1) // second signal. Exit directly.
@@ -232,6 +238,9 @@ func (h *HelmPod) waitUntilPodIsRunning(pod *corev1.Pod) error {
 		if err != nil {
 			mErr = multierr.Append(mErr, fmt.Errorf("%s", stderr))
 			mErr = multierr.Append(mErr, err)
+		}
+		if h.interrupted {
+			return fmt.Errorf("interrupted while was waiting for pod readiness")
 		}
 		time.Sleep(time.Second)
 	}

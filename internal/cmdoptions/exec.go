@@ -16,6 +16,7 @@ type ExecOptions struct {
 	SubstEnv        []string
 	RunAsUser       int64
 	Tolerations     []string
+	NodeSelector    map[string]string
 	RunAsGroup      int64
 	ImagePullSecret string
 	PullPolicy      string
