@@ -15,6 +15,7 @@ type ExecOptions struct {
 	FilesAsMap      map[string]string
 	SubstEnv        []string
 	RunAsUser       int64
+	Tolerations     []string
 	RunAsGroup      int64
 	ImagePullSecret string
 	PullPolicy      string

@@ -10,7 +10,7 @@ import (
 
 func RunCommand(cmd *cobra.Command) error {
 	flags := cmd.PersistentFlags()
-	flags.ParseErrorsWhitelist.UnknownFlags = true
+	flags.ParseErrorsAllowlist.UnknownFlags = true
 	_ = flags.Parse(os.Args[1:])
 	dur, err := cmd.PersistentFlags().GetDuration("timeout")
 	if err != nil {

@@ -21,10 +21,7 @@ func Compress(src string, destPath string, buf io.Writer) error {
 	if err != nil {
 		return err
 	}
-	isDir := false
-	if stat.IsDir() {
-		isDir = true
-	}
+	isDir := stat.IsDir()
 	// walk through every file in the path
 	err = filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
 		// generate tar header

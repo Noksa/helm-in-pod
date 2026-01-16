@@ -30,9 +30,9 @@ import (
 
 func newExecCmd() *cobra.Command {
 	execCmd := &cobra.Command{
-		Use:     "exec [flags] -- <helm_command_to_run>",
+		Use:     "exec [flags] -- <command_to_run>",
 		Aliases: []string{"run"},
-		Short:   "Executes commands in helm pod",
+		Short:   "Executes commands in a pod inside k8s cluster",
 	}
 	opts := cmdoptions.ExecOptions{}
 	execCmd.Flags().Int64Var(&opts.RunAsUser, "run-as-user", -1, "Run as user ID to be set in security context. Omitted if not specified and default from an image is used")
@@ -41,6 +41,7 @@ func newExecCmd() *cobra.Command {
 	execCmd.Flags().StringToStringVar(&opts.Annotations, "annotations", map[string]string{}, "Additional annotations to be set on a pod")
 	execCmd.Flags().StringVar(&opts.Cpu, "cpu", "1100m", "Pod's cpu request/limit")
 	execCmd.Flags().StringVar(&opts.Memory, "memory", "500Mi", "Pod's memory request/limit")
+	execCmd.Flags().StringSliceVar(&opts.Tolerations, "tolerations", []string{}, "Pod's tolerations in format key=value:effect:operator. Examples: '::Exists' (all taints), 'key=::Exists' (key with any effect), 'key=:NoSchedule:Exists', 'key=value:NoSchedule:Equal'")
 	execCmd.Flags().StringToStringVarP(&opts.Env, "env", "e", map[string]string{}, "Environment variables to be set in helm's pod before running a command")
 	execCmd.Flags().StringSliceVarP(&opts.SubstEnv, "subst-env", "s", []string{}, "Environment variables to be substituted in helm's pod (WITHOUT values). Values will be substituted from exported env on host")
 	execCmd.Flags().StringVar(&opts.ImagePullSecret, "image-pull-secret", "", "Specify an image pull secret which should be used to pull --image from private repository")
@@ -97,7 +98,7 @@ func newExecCmd() *cobra.Command {
 				mErr = nil
 				break
 			}
-			mErr = multierr.Append(mErr, fmt.Errorf(stderr))
+			mErr = multierr.Append(mErr, fmt.Errorf("%s", stderr))
 			mErr = multierr.Append(mErr, runCommandErr)
 			time.Sleep(time.Second)
 		}
@@ -105,10 +106,20 @@ func newExecCmd() *cobra.Command {
 			return mErr
 		}
 		mErr = nil
-		isHelm4, err := helpers.IsHelm4(pod.Name, pod.Namespace)
+		helmFound := false
+		isHelm4, err := helpers.IsHelm4(pod.Name, pod.Namespace, opts.Image)
 		if err != nil {
-			return err
+			if !strings.Contains(err.Error(), "helm is not installed") {
+				return err
+			}
+		} else {
+			helmFound = true
 		}
+
+		if !helmFound {
+			log.Warnf("%v helm is not installed in the image, all helm prerequisites will be skipped. If the passed command contains helm calls, it will fail", logz.LogPod())
+		}
+
 		stdout = strings.TrimSpace(stdout)
 		splitted := strings.Split(stdout, ":::")
 		homeDirectory := strings.TrimSuffix(splitted[0], "/")
@@ -127,7 +138,7 @@ func newExecCmd() *cobra.Command {
 		}
 		log.Debugf("%v (%v) home directory: %v", logz.LogPod(), color.GreenString(whoami), color.MagentaString(homeDirectory))
 
-		if opts.CopyRepo {
+		if opts.CopyRepo && helmFound {
 			settings := cli.New()
 			_, statErr := os.Stat(settings.RepositoryConfig)
 			if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
@@ -141,7 +152,7 @@ func newExecCmd() *cobra.Command {
 						mErr = nil
 						break
 					}
-					mErr = multierr.Append(mErr, fmt.Errorf(stderr))
+					mErr = multierr.Append(mErr, fmt.Errorf("%s", stderr))
 					mErr = multierr.Append(mErr, runCommandErr)
 					time.Sleep(time.Second)
 				}

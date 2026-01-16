@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/noksa/helm-in-pod/internal"
@@ -11,8 +12,17 @@ import (
 
 // GetHelmMajorVersion returns the major version of Helm running in the specified pod
 // Returns 0 if version cannot be determined
-func GetHelmMajorVersion(podName, podNamespace string) (int, error) {
-	stdout, stderr, err := operatorkclient.RunCommandInPod("helm version --template '{{ $.Version }}'", internal.HelmInPodNamespace, podName, podNamespace, nil)
+func GetHelmMajorVersion(podName, podNamespace, image string) (int, error) {
+	var stdout string
+	_, stderr, err := operatorkclient.RunCommandInPod("helm --help", internal.HelmInPodNamespace, podName, podNamespace, nil)
+	if err != nil {
+		if strings.Contains(stderr, "helm: not found") {
+			return 0, fmt.Errorf("helm is not installed in image %v", image)
+		}
+		return 0, fmt.Errorf("failed to get helm version: %v, stderr: %s", err, stderr)
+	}
+
+	stdout, stderr, err = operatorkclient.RunCommandInPod("helm version --template '{{ $.Version }}'", internal.HelmInPodNamespace, podName, podNamespace, nil)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get helm version: %v, stderr: %s", err, stderr)
 	}
@@ -33,8 +43,8 @@ func GetHelmMajorVersion(podName, podNamespace string) (int, error) {
 }
 
 // IsHelm4 checks if the Helm version in pod equals 4
-func IsHelm4(podName, podNamespace string) (bool, error) {
-	major, err := GetHelmMajorVersion(podName, podNamespace)
+func IsHelm4(podName, podNamespace, image string) (bool, error) {
+	major, err := GetHelmMajorVersion(podName, podNamespace, image)
 	if err != nil {
 		return false, err
 	}

@@ -5,6 +5,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"maps"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/fatih/color"
 	"github.com/noksa/go-helpers/helpers/gopointer"
@@ -14,22 +24,52 @@ import (
 	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
 	"go.uber.org/multierr"
-	"io"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
-	"maps"
-	"os"
-	"os/signal"
-	"path/filepath"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strconv"
-	"strings"
-	"syscall"
-	"time"
 )
+
+// parseToleration parses a toleration string in format: key=value:effect:operator
+// Examples:
+//
+//	"::Exists" - tolerate all taints
+//	"key=::Exists" - tolerate key with any effect
+//	"key=:effect:Exists" - tolerate specific key with any value
+//	"key=value:effect:Equal" - tolerate specific key=value
+func parseToleration(s string) (corev1.Toleration, error) {
+	parts := strings.Split(s, ":")
+	if len(parts) != 3 {
+		return corev1.Toleration{}, fmt.Errorf("expected format key=value:effect:operator, got %q", s)
+	}
+
+	operator := corev1.TolerationOperator(parts[2])
+	if operator != corev1.TolerationOpEqual && operator != corev1.TolerationOpExists {
+		return corev1.Toleration{}, fmt.Errorf("operator must be Equal or Exists, got %q", parts[2])
+	}
+
+	toleration := corev1.Toleration{
+		Operator: operator,
+	}
+
+	// Effect can be empty to match all effects
+	if parts[1] != "" {
+		toleration.Effect = corev1.TaintEffect(parts[1])
+	}
+
+	// Key and value parsing
+	if parts[0] != "" {
+		keyValue := strings.SplitN(parts[0], "=", 2)
+		toleration.Key = keyValue[0]
+		if len(keyValue) == 2 {
+			toleration.Value = keyValue[1]
+		}
+	}
+
+	return toleration, nil
+}
 
 type HelmPod struct {
 }
@@ -136,6 +176,18 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	if opts.ImagePullSecret != "" {
 		podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{Name: opts.ImagePullSecret})
 	}
+	seen := make(map[string]bool)
+	for _, t := range opts.Tolerations {
+		if seen[t] {
+			return nil, fmt.Errorf("duplicate toleration %q", t)
+		}
+		seen[t] = true
+		toleration, err := parseToleration(t)
+		if err != nil {
+			return nil, fmt.Errorf("invalid toleration %q: %w", t, err)
+		}
+		podSpec.Tolerations = append(podSpec.Tolerations, toleration)
+	}
 	pod, err := clientSet.CoreV1().Pods(HelmInPodNamespace).Create(ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("%v-", HelmInPodNamespace),
@@ -178,7 +230,7 @@ func (h *HelmPod) waitUntilPodIsRunning(pod *corev1.Pod) error {
 			break
 		}
 		if err != nil {
-			mErr = multierr.Append(mErr, fmt.Errorf(stderr))
+			mErr = multierr.Append(mErr, fmt.Errorf("%s", stderr))
 			mErr = multierr.Append(mErr, err)
 		}
 		time.Sleep(time.Second)
@@ -237,7 +289,7 @@ tar zxf - -C /`, dir)},
 		})
 		if err != nil {
 			mErr = multierr.Append(mErr, err)
-			mErr = multierr.Append(mErr, fmt.Errorf(b.String()))
+			mErr = multierr.Append(mErr, fmt.Errorf("%s", b.String()))
 			continue
 		}
 		log.Debugf("%v %v %v has been copied to %v", logz.LogHost(), logz.LogPod(), color.CyanString(srcPath), color.MagentaString(destPath))
@@ -256,7 +308,7 @@ func (h *HelmPod) StreamLogsFromPod(ctx context.Context, pod *corev1.Pod, writer
 	if err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	r := bufio.NewReader(stream)
 	for {
 		line, err := r.ReadBytes('\n')
