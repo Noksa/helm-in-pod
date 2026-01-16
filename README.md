@@ -73,6 +73,7 @@ helm in-pod exec [FLAGS] -- "COMMAND"
 | `--subst-env`   | `-s`  | Substitute environment variables from host |
 | `--image`       | `-i`  | Use custom Docker image                    |
 | `--update-repo` |       | Update specified Helm repositories         |
+| `--tolerations` |       | Pod tolerations for node taints            |
 
 ---
 
@@ -183,6 +184,28 @@ helm in-pod exec \
 </details>
 
 ### 🔍 Advanced Operations
+
+<details>
+<summary><strong>Running on tainted nodes</strong></summary>
+
+```bash
+# Tolerate all taints
+helm in-pod exec --tolerations "::Exists" -- "helm list -A"
+
+# Tolerate specific key with any effect
+helm in-pod exec --tolerations "key=:NoSchedule:Exists" -- "helm list -A"
+
+# Tolerate specific key-value pair
+helm in-pod exec --tolerations "key=value:NoSchedule:Equal" -- "helm list -A"
+
+# Multiple tolerations
+helm in-pod exec \
+  --tolerations "node-role.kubernetes.io/control-plane=:NoSchedule:Exists" \
+  --tolerations "dedicated=special:NoExecute:Equal" -- \
+  "helm list -A"
+```
+
+</details>
 
 <details>
 <summary><strong>Helm diff with custom configuration</strong></summary>
