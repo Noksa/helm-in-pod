@@ -141,7 +141,7 @@ func (m *Manager) waitUntilPodIsRunning(pod *corev1.Pod) error {
 		}
 
 		if err != nil {
-			log.Debugf("Pod not ready yet: %v %v", stderr, err.Error())
+			log.Debugf("%v Not ready yet: %v %v", logz.LogPod(), stderr, err.Error())
 		}
 
 		time.Sleep(time.Second)
