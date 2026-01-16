@@ -10,66 +10,23 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/fatih/color"
-	"github.com/noksa/go-helpers/helpers/gopointer"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/helmtar"
-	"github.com/noksa/helm-in-pod/internal/hipembedded"
 	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
 	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-// parseToleration parses a toleration string in format: key=value:effect:operator
-// Examples:
-//
-//	"::Exists" - tolerate all taints
-//	"key=::Exists" - tolerate key with any effect
-//	"key=:effect:Exists" - tolerate specific key with any value
-//	"key=value:effect:Equal" - tolerate specific key=value
-func parseToleration(s string) (corev1.Toleration, error) {
-	parts := strings.Split(s, ":")
-	if len(parts) != 3 {
-		return corev1.Toleration{}, fmt.Errorf("expected format key=value:effect:operator, got %q", s)
-	}
-
-	operator := corev1.TolerationOperator(parts[2])
-	if operator != corev1.TolerationOpEqual && operator != corev1.TolerationOpExists {
-		return corev1.Toleration{}, fmt.Errorf("operator must be Equal or Exists, got %q", parts[2])
-	}
-
-	toleration := corev1.Toleration{
-		Operator: operator,
-	}
-
-	// Effect can be empty to match all effects
-	if parts[1] != "" {
-		toleration.Effect = corev1.TaintEffect(parts[1])
-	}
-
-	// Key and value parsing
-	if parts[0] != "" {
-		keyValue := strings.SplitN(parts[0], "=", 2)
-		toleration.Key = keyValue[0]
-		if len(keyValue) == 2 {
-			toleration.Value = keyValue[1]
-		}
-	}
-
-	return toleration, nil
-}
 
 type HelmPod struct {
 	interrupted bool
@@ -108,91 +65,16 @@ func (h *HelmPod) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	}
 	log.Infof("%v Creating '%v' pod", logz.LogHost(), HelmInPodNamespace)
 
-	var envVars []corev1.EnvVar
-	for _, env := range opts.SubstEnv {
-		val := os.Getenv(env)
-		envVar := corev1.EnvVar{
-			Name:  env,
-			Value: val,
-		}
-		envVars = append(envVars, envVar)
+	podSpec, err := buildPodSpec(opts)
+	if err != nil {
+		return nil, err
 	}
-	for k, v := range opts.Env {
-		envVar := corev1.EnvVar{
-			Name:  k,
-			Value: v,
-		}
-		envVars = append(envVars, envVar)
-	}
-	envVars = append(envVars, corev1.EnvVar{
-		Name:  "TIMEOUT",
-		Value: strconv.Itoa(int(opts.Timeout.Seconds())),
-	})
-	resourceList := corev1.ResourceList{
-		"cpu":    resource.MustParse(opts.Cpu),
-		"memory": resource.MustParse(opts.Memory),
-	}
+
 	labels := map[string]string{"host": myHostname}
 	maps.Copy(labels, opts.Labels)
 	annotations := map[string]string{}
 	maps.Copy(annotations, opts.Annotations)
-	securityContext := &corev1.SecurityContext{}
-	if opts.RunAsUser > -1 {
-		securityContext.RunAsUser = gopointer.NewOf(opts.RunAsUser)
-	}
-	if opts.RunAsGroup > -1 {
-		securityContext.RunAsGroup = gopointer.NewOf(opts.RunAsGroup)
-	}
-	podSpec := corev1.PodSpec{
-		Containers: []corev1.Container{{
-			Name:            HelmInPodNamespace,
-			ImagePullPolicy: corev1.PullPolicy(opts.PullPolicy),
-			Image:           opts.Image,
-			Command: []string{
-				"sh", "-cue",
-			},
-			Env: envVars,
-			Resources: corev1.ResourceRequirements{
-				Requests: resourceList,
-				Limits:   resourceList,
-			},
-			SecurityContext: securityContext,
-			Args:            []string{hipembedded.GetShScript()},
-			WorkingDir:      "/",
-			StartupProbe: &corev1.Probe{
-				ProbeHandler: corev1.ProbeHandler{
-					Exec: &corev1.ExecAction{Command: []string{"" +
-						"sh", "-c", "([ -f /tmp/ready ] && exit 0) || exit 1"}},
-				},
-				TimeoutSeconds:   2,
-				PeriodSeconds:    1,
-				SuccessThreshold: 1,
-				FailureThreshold: 60,
-			},
-		}},
-		RestartPolicy:                 corev1.RestartPolicyNever,
-		ServiceAccountName:            HelmInPodNamespace,
-		AutomountServiceAccountToken:  gopointer.NewOf(true),
-		TerminationGracePeriodSeconds: gopointer.NewOf[int64](300),
-	}
-	if opts.ImagePullSecret != "" {
-		podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{Name: opts.ImagePullSecret})
-	}
-	seen := make(map[string]bool)
-	for _, t := range opts.Tolerations {
-		if seen[t] {
-			return nil, fmt.Errorf("duplicate toleration %q", t)
-		}
-		seen[t] = true
-		toleration, err := parseToleration(t)
-		if err != nil {
-			return nil, fmt.Errorf("invalid toleration %q: %w", t, err)
-		}
-		podSpec.Tolerations = append(podSpec.Tolerations, toleration)
-	}
-	if len(opts.NodeSelector) > 0 {
-		podSpec.NodeSelector = opts.NodeSelector
-	}
+
 	pod, err := clientSet.CoreV1().Pods(HelmInPodNamespace).Create(ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("%v-", HelmInPodNamespace),

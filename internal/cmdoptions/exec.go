@@ -20,6 +20,7 @@ type ExecOptions struct {
 	RunAsGroup      int64
 	ImagePullSecret string
 	PullPolicy      string
+	HostNetwork     bool
 	// Timeout is duration from --timeout flag + 10 minutes
 	// set internally
 	Timeout            time.Duration
