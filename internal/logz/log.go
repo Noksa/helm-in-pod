@@ -2,6 +2,7 @@ package logz
 
 import (
 	"fmt"
+
 	"github.com/fatih/color"
 )
 

@@ -1,9 +1,10 @@
 package main
 
 import (
+	"os"
+
 	"github.com/noksa/helm-in-pod/cmd"
 	log "github.com/sirupsen/logrus"
-	"os"
 )
 
 func main() {

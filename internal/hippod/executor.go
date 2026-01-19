@@ -266,7 +266,7 @@ func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, c
 	}
 
 	// Log command execution to PID 1 stdout
-	_, err = tempScriptFile.WriteString(fmt.Sprintf("echo \"[$(date +%%D-%%T)] Executing: %s\" > /proc/1/fd/1\n", command))
+	_, err = fmt.Fprintf(tempScriptFile, "echo \"[$(date +%%D-%%T)] Executing: %s\" > /proc/1/fd/1\n", command)
 	if err != nil {
 		return err
 	}
@@ -274,13 +274,13 @@ func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, c
 	// Export environment variables
 	for _, env := range opts.SubstEnv {
 		val := os.Getenv(env)
-		_, err = tempScriptFile.WriteString(fmt.Sprintf("export %s=%q\n", env, val))
+		_, err = fmt.Fprintf(tempScriptFile, "export %s=%q\n", env, val)
 		if err != nil {
 			return err
 		}
 	}
 	for k, v := range opts.Env {
-		_, err = tempScriptFile.WriteString(fmt.Sprintf("export %s=%q\n", k, v))
+		_, err = fmt.Fprintf(tempScriptFile, "export %s=%q\n", k, v)
 		if err != nil {
 			return err
 		}

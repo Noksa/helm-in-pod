@@ -4,13 +4,14 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"fmt"
-	"github.com/fatih/color"
-	"github.com/noksa/helm-in-pod/internal/logz"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/fatih/color"
+	"github.com/noksa/helm-in-pod/internal/logz"
+	log "github.com/sirupsen/logrus"
 )
 
 func Compress(src string, destPath string, buf io.Writer) error {

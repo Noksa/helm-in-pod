@@ -58,7 +58,7 @@ func newDaemonExecCmd() *cobra.Command {
 					}
 				} else if opts.UpdateAllRepos {
 					// Update all repos without copying
-					opts.ExecOptions.UpdateRepo = []string{}
+					opts.UpdateRepo = []string{}
 					err = internal.Pod.UpdateHelmRepositories(pod, opts.ExecOptions, isHelm4)
 					if err != nil {
 						return err
