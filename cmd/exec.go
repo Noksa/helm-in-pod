@@ -97,7 +97,7 @@ func newExecCmd() *cobra.Command {
 		}
 
 		// Copy user files
-		err = internal.Pod.CopyUserFiles(pod, opts, expand)
+		err = internal.Pod.CopyUserFiles(pod, opts, expand, nil)
 		if err != nil {
 			return err
 		}

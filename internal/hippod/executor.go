@@ -161,7 +161,17 @@ func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 	return mErr
 }
 
-func (m *Manager) CopyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions, expandPath func(string) (string, error)) error {
+func (m *Manager) CopyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions, expandPath func(string) (string, error), cleanPaths []string) error {
+	// Delete specified paths first to ensure clean state
+	if len(cleanPaths) > 0 {
+		cmd := fmt.Sprintf("rm -rf %s", strings.Join(cleanPaths, " "))
+		log.Debugf("%v Cleaning up files: %v", logz.LogPod(), cmd)
+		stdOut, stdErr, err := operatorkclient.RunCommandInPod(cmd, Namespace, pod.Name, pod.Namespace, nil)
+		if err != nil {
+			return fmt.Errorf("%v\n%v\n%v", err, stdErr, stdOut)
+		}
+	}
+
 	for k, v := range opts.FilesAsMap {
 		path, err := expandPath(k)
 		if err != nil {

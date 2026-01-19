@@ -50,6 +50,12 @@ helm in-pod daemon exec --name my-daemon \
   --copy ~/values.yaml:/tmp/values.yaml -- \
   "helm upgrade myapp repo/chart -f /tmp/values.yaml"
 
+# Clean paths before copying (ensures fresh state)
+helm in-pod daemon exec --name my-daemon \
+  --clean /tmp/config --clean /tmp/data \
+  --copy ~/config:/tmp/config -- \
+  "helm upgrade myapp repo/chart"
+
 # Update repositories
 helm in-pod daemon exec --name my-daemon --update-all-repos -- "helm upgrade ..."
 ```
@@ -162,6 +168,7 @@ Runtime flags only (pod already exists):
 - `--env`, `-e` - Environment variables
 - `--subst-env`, `-s` - Substitute from host
 - `--copy`, `-c` - Copy files
+- `--clean` - Paths to delete before copying files (ensures clean state)
 - `--copy-repo` - Copy/replace helm repos
 - `--update-repo` - Update specific repos
 - `--update-all-repos` - Update all repos
@@ -182,6 +189,7 @@ Runtime flags only (pod already exists):
 - **Set `HELM_IN_POD_DAEMON_NAME`** environment variable to avoid repeating `--name` flag
 - Use `--update-all-repos` to refresh repositories without copying from host
 - Copy files during `exec` for dynamic configurations
+- Use `--clean` to remove old files/folders before copying new ones (prevents stale data)
 - Set environment variables per-command for different contexts
 - Run multiple daemons with different names for isolation
 - Daemon pods are named `daemon-<name>` - you can see them with `kubectl get pods -n helm-in-pod`

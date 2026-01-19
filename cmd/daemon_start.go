@@ -92,7 +92,7 @@ func newDaemonStartCmd() *cobra.Command {
 				}
 			}
 
-			err = internal.Pod.CopyUserFiles(pod, opts.ExecOptions, expand)
+			err = internal.Pod.CopyUserFiles(pod, opts.ExecOptions, expand, nil)
 			if err != nil {
 				return err
 			}

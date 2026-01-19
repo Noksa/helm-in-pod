@@ -81,7 +81,7 @@ func newDaemonExecCmd() *cobra.Command {
 						opts.FilesAsMap[splitted[0]] = splitted[1]
 					}
 				}
-				err = internal.Pod.CopyUserFiles(pod, opts.ExecOptions, expand)
+				err = internal.Pod.CopyUserFiles(pod, opts.ExecOptions, expand, opts.Clean)
 				if err != nil {
 					return err
 				}
@@ -97,6 +97,7 @@ func newDaemonExecCmd() *cobra.Command {
 	}
 	execCmd.Flags().StringVar(&opts.Name, "name", "", "Daemon name (required)")
 	execCmd.Flags().BoolVar(&opts.UpdateAllRepos, "update-all-repos", false, "Update all helm repositories without copying them")
+	execCmd.Flags().StringSliceVar(&opts.Clean, "clean", []string{}, "Paths to delete before copying files")
 	addRuntimeFlags(execCmd, &opts.ExecOptions, false)
 	return execCmd
 }
