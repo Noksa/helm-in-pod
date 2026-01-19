@@ -265,6 +265,12 @@ func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, c
 		return err
 	}
 
+	// Log command execution to PID 1 stdout
+	_, err = tempScriptFile.WriteString(fmt.Sprintf("echo \"[$(date +%%D-%%T)] Executing: %s\" > /proc/1/fd/1\n", command))
+	if err != nil {
+		return err
+	}
+
 	// Export environment variables
 	for _, env := range opts.SubstEnv {
 		val := os.Getenv(env)
@@ -281,6 +287,12 @@ func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, c
 	}
 
 	_, err = tempScriptFile.WriteString(command)
+	if err != nil {
+		return err
+	}
+
+	// Log command completion to PID 1 stdout
+	_, err = tempScriptFile.WriteString("\necho \"[$(date +%D-%T)] Executed successfully\" > /proc/1/fd/1\n")
 	if err != nil {
 		return err
 	}

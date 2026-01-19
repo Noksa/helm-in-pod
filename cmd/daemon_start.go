@@ -21,8 +21,10 @@ func newDaemonStartCmd() *cobra.Command {
 		Use:   "start",
 		Short: "Start a daemon pod",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if opts.Name == "" {
-				return fmt.Errorf("--name is required")
+			var err error
+			opts.Name, err = getDaemonName(opts.Name)
+			if err != nil {
+				return err
 			}
 			if opts.CopyAttempts < 1 {
 				return fmt.Errorf("copy-attempts value can't be less 1")
@@ -53,7 +55,7 @@ func newDaemonStartCmd() *cobra.Command {
 				}
 			}
 
-			err := internal.Namespace.PrepareNs()
+			err = internal.Namespace.PrepareNs()
 			if err != nil {
 				return err
 			}

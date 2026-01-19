@@ -245,7 +245,6 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 	if err != nil {
 		return nil, err
 	}
-
 	labels := map[string]string{"daemon": opts.Name}
 	maps.Copy(labels, opts.Labels)
 	annotations := map[string]string{}

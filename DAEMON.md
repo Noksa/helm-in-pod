@@ -179,6 +179,7 @@ Runtime flags only (pod already exists):
 
 ## 💡 Tips
 
+- **Set `HELM_IN_POD_DAEMON_NAME`** environment variable to avoid repeating `--name` flag
 - Use `--update-all-repos` to refresh repositories without copying from host
 - Copy files during `exec` for dynamic configurations
 - Set environment variables per-command for different contexts
