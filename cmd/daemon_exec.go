@@ -8,6 +8,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -35,13 +36,13 @@ func newDaemonExecCmd() *cobra.Command {
 			}
 			log.Infof("%s Found %s daemon", logz.LogHost(), color.CyanString(pod.Name))
 
-			homeDirectory := pod.Annotations[internal.AnnotationHomeDirectory]
+			homeDirectory := pod.Annotations[hipconsts.AnnotationHomeDirectory]
 			if homeDirectory == "" {
 				return fmt.Errorf("daemon pod missing home-directory annotation")
 			}
 
-			helmFound := pod.Annotations[internal.AnnotationHelmFound] == "true"
-			isHelm4 := pod.Annotations[internal.AnnotationHelm4] == "true"
+			helmFound := pod.Annotations[hipconsts.AnnotationHelmFound] == "true"
+			isHelm4 := pod.Annotations[hipconsts.AnnotationHelm4] == "true"
 
 			if helmFound && (opts.CopyRepo || len(opts.UpdateRepo) > 0 || opts.UpdateAllRepos) {
 				if opts.CopyAttempts < 1 {

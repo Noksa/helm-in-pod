@@ -9,6 +9,7 @@ import (
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/helpers"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -98,11 +99,11 @@ func newDaemonStartCmd() *cobra.Command {
 
 			// Annotate pod with user info and helm version
 			annotations := map[string]string{
-				internal.AnnotationHomeDirectory: userInfo.HomeDirectory,
-				internal.AnnotationHelmFound:     fmt.Sprintf("%v", helmFound),
+				hipconsts.AnnotationHomeDirectory: userInfo.HomeDirectory,
+				hipconsts.AnnotationHelmFound:     fmt.Sprintf("%v", helmFound),
 			}
 			if helmFound {
-				annotations[internal.AnnotationHelm4] = fmt.Sprintf("%v", isHelm4)
+				annotations[hipconsts.AnnotationHelm4] = fmt.Sprintf("%v", isHelm4)
 			}
 			err = internal.Pod.AnnotatePod(pod, annotations)
 			if err != nil {

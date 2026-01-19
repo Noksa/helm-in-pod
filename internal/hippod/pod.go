@@ -287,17 +287,25 @@ func (m *Manager) DeleteDaemonPod(name string) error {
 }
 
 func (m *Manager) AnnotatePod(pod *corev1.Pod, annotations map[string]string) error {
-	// Get latest pod state
-	latestPod, err := m.clientSet.CoreV1().Pods(pod.Namespace).Get(m.ctx, pod.Name, metav1.GetOptions{})
-	if err != nil {
-		return err
-	}
+	return hipretry.Retry(3, func() error {
+		// Get latest pod state before each attempt
+		latestPod, err := m.clientSet.CoreV1().Pods(pod.Namespace).Get(m.ctx, pod.Name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
 
-	if latestPod.Annotations == nil {
-		latestPod.Annotations = make(map[string]string)
-	}
-	maps.Copy(latestPod.Annotations, annotations)
-	_, err = m.clientSet.CoreV1().Pods(latestPod.Namespace).Update(m.ctx, latestPod, metav1.UpdateOptions{})
-	pod = latestPod
-	return err
+		if latestPod.Annotations == nil {
+			latestPod.Annotations = make(map[string]string)
+		}
+		maps.Copy(latestPod.Annotations, annotations)
+
+		updatedPod, err := m.clientSet.CoreV1().Pods(latestPod.Namespace).Update(m.ctx, latestPod, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+
+		// Update the original pod reference with the latest state
+		*pod = *updatedPod
+		return nil
+	})
 }

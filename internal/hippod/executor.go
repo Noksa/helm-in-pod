@@ -14,6 +14,7 @@ import (
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/hipretry"
 	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
@@ -107,7 +108,16 @@ func (m *Manager) SyncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOpti
 }
 
 func (m *Manager) UpdateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, isHelm4 bool) error {
-	return m.updateHelmRepositories(pod, opts, isHelm4)
+	err := m.updateHelmRepositories(pod, opts, isHelm4)
+	if err != nil {
+		return err
+	}
+
+	// Add annotation with last update time in RFC3339 format
+	updateTime := time.Now().Format(time.RFC3339)
+	return m.AnnotatePod(pod, map[string]string{
+		hipconsts.AnnotationLastRepoUpdateTime: updateTime,
+	})
 }
 
 func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, isHelm4 bool) error {

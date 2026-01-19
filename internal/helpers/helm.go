@@ -7,14 +7,14 @@ import (
 	"strings"
 
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
-	"github.com/noksa/helm-in-pod/internal"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
 
 // GetHelmMajorVersion returns the major version of Helm running in the specified pod
 // Returns 0 if version cannot be determined
 func GetHelmMajorVersion(podName, podNamespace, image string) (int, error) {
 	var stdout string
-	_, stderr, err := operatorkclient.RunCommandInPod("helm --help", internal.HelmInPodNamespace, podName, podNamespace, nil)
+	_, stderr, err := operatorkclient.RunCommandInPod("helm --help", hipconsts.HelmInPodNamespace, podName, podNamespace, nil)
 	if err != nil {
 		if strings.Contains(stderr, "helm: not found") {
 			return 0, fmt.Errorf("helm is not installed in image %v", image)
@@ -22,7 +22,7 @@ func GetHelmMajorVersion(podName, podNamespace, image string) (int, error) {
 		return 0, fmt.Errorf("failed to get helm version: %v, stderr: %s", err, stderr)
 	}
 
-	stdout, stderr, err = operatorkclient.RunCommandInPod("helm version --template '{{ $.Version }}'", internal.HelmInPodNamespace, podName, podNamespace, nil)
+	stdout, stderr, err = operatorkclient.RunCommandInPod("helm version --template '{{ $.Version }}'", hipconsts.HelmInPodNamespace, podName, podNamespace, nil)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get helm version: %v, stderr: %s", err, stderr)
 	}

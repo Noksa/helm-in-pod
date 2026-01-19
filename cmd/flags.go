@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/spf13/cobra"
 )
 
 func getDaemonName(name string) (string, error) {
 	if name == "" {
-		name = os.Getenv(internal.EnvDaemonName)
+		name = os.Getenv(hipconsts.EnvDaemonName)
 	}
 	if name == "" {
-		return "", fmt.Errorf("--name is required (or set %s)", internal.EnvDaemonName)
+		return "", fmt.Errorf("--name is required (or set %s)", hipconsts.EnvDaemonName)
 	}
 	return name, nil
 }
