@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/helpers"
@@ -106,7 +107,7 @@ func newDaemonStartCmd() *cobra.Command {
 				return err
 			}
 
-			log.Infof("Daemon pod '%s' started successfully", pod.Name)
+			log.Infof("Daemon pod '%s' started successfully", color.CyanString(pod.Name))
 			return nil
 		},
 	}

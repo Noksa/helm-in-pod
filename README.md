@@ -50,6 +50,28 @@ When `helm` runs commands from your local machine, network latency to distant Ku
 
 ---
 
+## ⚡ NEW: Daemon Mode
+
+> 🔥 **Run multiple commands without pod recreation overhead!**
+
+```bash
+# Start once
+helm in-pod daemon start --name dev --copy-repo
+
+# Execute many times - INSTANT! ⚡
+helm in-pod daemon exec --name dev -- "helm list -A"
+helm in-pod daemon exec --name dev -- "helm upgrade myapp ..."
+
+# Stop when done
+helm in-pod daemon stop --name dev
+```
+
+**10x faster** for multiple operations! Perfect for CI/CD, interactive development, and batch deployments.
+
+👉 **[Read Full Daemon Mode Documentation](DAEMON.md)**
+
+---
+
 ## 📖 Usage
 
 ### 🔍 Getting Help

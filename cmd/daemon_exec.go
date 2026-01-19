@@ -5,8 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/logz"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -17,17 +20,20 @@ func newDaemonExecCmd() *cobra.Command {
 		Use:   "exec [flags] -- <command_to_run>",
 		Short: "Execute command in a daemon pod",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if opts.Name == "" {
-				return fmt.Errorf("--name is required")
+			var err error
+			opts.Name, err = getDaemonName(opts.Name)
+			if err != nil {
+				return err
 			}
 			if len(args) == 0 {
 				return fmt.Errorf("specify command to run")
 			}
-
+			log.Debugf("%s Looking for %s daemon", logz.LogHost(), color.CyanString(opts.Name))
 			pod, err := internal.Pod.GetDaemonPod(opts.Name)
 			if err != nil {
 				return err
 			}
+			log.Infof("%s Found %s daemon", logz.LogHost(), color.CyanString(pod.Name))
 
 			homeDirectory := pod.Annotations[internal.AnnotationHomeDirectory]
 			if homeDirectory == "" {
@@ -37,7 +43,7 @@ func newDaemonExecCmd() *cobra.Command {
 			helmFound := pod.Annotations[internal.AnnotationHelmFound] == "true"
 			isHelm4 := pod.Annotations[internal.AnnotationHelm4] == "true"
 
-			if helmFound && (opts.CopyRepo || len(opts.UpdateRepo) > 0) {
+			if helmFound && (opts.CopyRepo || len(opts.UpdateRepo) > 0 || opts.UpdateAllRepos) {
 				if opts.CopyAttempts < 1 {
 					return fmt.Errorf("copy-attempts value can't be less 1")
 				}
@@ -47,6 +53,13 @@ func newDaemonExecCmd() *cobra.Command {
 
 				if opts.CopyRepo {
 					err = internal.Pod.SyncHelmRepositories(pod, opts.ExecOptions, homeDirectory, isHelm4)
+					if err != nil {
+						return err
+					}
+				} else if opts.UpdateAllRepos {
+					// Update all repos without copying
+					opts.ExecOptions.UpdateRepo = []string{}
+					err = internal.Pod.UpdateHelmRepositories(pod, opts.ExecOptions, isHelm4)
 					if err != nil {
 						return err
 					}
@@ -82,6 +95,7 @@ func newDaemonExecCmd() *cobra.Command {
 		},
 	}
 	execCmd.Flags().StringVar(&opts.Name, "name", "", "Daemon name (required)")
-	addExecOptionsFlags(execCmd, &opts.ExecOptions)
+	execCmd.Flags().BoolVar(&opts.UpdateAllRepos, "update-all-repos", false, "Update all helm repositories without copying them")
+	addRuntimeFlags(execCmd, &opts.ExecOptions, false)
 	return execCmd
 }

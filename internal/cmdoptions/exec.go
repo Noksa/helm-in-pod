@@ -9,6 +9,7 @@ type ExecOptions struct {
 	Labels          map[string]string
 	Annotations     map[string]string
 	UpdateRepo      []string
+	UpdateAllRepos  bool
 	Cpu             string
 	Memory          string
 	Env             map[string]string
