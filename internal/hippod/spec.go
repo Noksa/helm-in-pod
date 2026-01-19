@@ -33,11 +33,14 @@ func buildPodSpec(opts cmdoptions.ExecOptions) (corev1.PodSpec, error) {
 		Value: strconv.Itoa(int(opts.Timeout.Seconds())),
 	})
 
-	resourceList := corev1.ResourceList{
-		"cpu":    resource.MustParse(opts.Cpu),
-		"memory": resource.MustParse(opts.Memory),
-	}
+	resourceList := corev1.ResourceList{}
 
+	if opts.Cpu != "" && opts.Cpu != "0" {
+		resourceList["cpu"] = resource.MustParse(opts.Cpu)
+	}
+	if opts.Memory != "" && opts.Memory != "0" {
+		resourceList["memory"] = resource.MustParse(opts.Memory)
+	}
 	securityContext := &corev1.SecurityContext{}
 	if opts.RunAsUser > -1 {
 		securityContext.RunAsUser = gopointer.NewOf(opts.RunAsUser)
@@ -53,10 +56,6 @@ func buildPodSpec(opts cmdoptions.ExecOptions) (corev1.PodSpec, error) {
 			Image:           opts.Image,
 			Command:         []string{"sh", "-cue"},
 			Env:             envVars,
-			Resources: corev1.ResourceRequirements{
-				Requests: resourceList,
-				Limits:   resourceList,
-			},
 			SecurityContext: securityContext,
 			Args:            []string{hipembedded.GetShScript()},
 			WorkingDir:      "/",
@@ -76,6 +75,12 @@ func buildPodSpec(opts cmdoptions.ExecOptions) (corev1.PodSpec, error) {
 		ServiceAccountName:            Namespace,
 		AutomountServiceAccountToken:  gopointer.NewOf(true),
 		TerminationGracePeriodSeconds: gopointer.NewOf[int64](300),
+	}
+	if len(resourceList) > 0 {
+		podSpec.Resources = &corev1.ResourceRequirements{
+			Requests: resourceList,
+			Limits:   resourceList,
+		}
 	}
 
 	if opts.ImagePullSecret != "" {
