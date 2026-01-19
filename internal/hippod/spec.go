@@ -150,3 +150,16 @@ func parseToleration(s string) (corev1.Toleration, error) {
 
 	return toleration, nil
 }
+
+func buildDaemonPodSpec(opts cmdoptions.ExecOptions) (corev1.PodSpec, error) {
+	podSpec, err := buildPodSpec(opts)
+	if err != nil {
+		return corev1.PodSpec{}, err
+	}
+
+	// Override command and args to run indefinitely with proper signal handling
+	podSpec.Containers[0].Command = []string{"sh", "-c"}
+	podSpec.Containers[0].Args = []string{"touch /tmp/ready && trap 'exit 0' TERM INT; sleep infinity & wait"}
+
+	return podSpec, nil
+}

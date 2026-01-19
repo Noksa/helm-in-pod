@@ -106,6 +106,10 @@ func (m *Manager) SyncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOpti
 	return m.updateHelmRepositories(pod, opts, isHelm4)
 }
 
+func (m *Manager) UpdateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, isHelm4 bool) error {
+	return m.updateHelmRepositories(pod, opts, isHelm4)
+}
+
 func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, isHelm4 bool) error {
 	if len(opts.UpdateRepo) == 0 {
 		return hipretry.Retry(opts.UpdateRepoAttempts, func() error {
@@ -237,6 +241,70 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 	wg.Wait()
 
 	return m.waitForPodCompletion(ctx, pod)
+}
+
+func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, command string, homeDirectory string, timeout time.Duration, opts cmdoptions.ExecOptions) error {
+	scriptPath := fmt.Sprintf("%v/wrapped-script.sh", homeDirectory)
+
+	tempScriptFile, err := os.CreateTemp("", "helm-in-pod")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tempScriptFile.Close()
+		_ = os.RemoveAll(tempScriptFile.Name())
+	}()
+
+	err = os.Chmod(tempScriptFile.Name(), os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	_, err = tempScriptFile.WriteString("set -eu\n")
+	if err != nil {
+		return err
+	}
+
+	// Export environment variables
+	for _, env := range opts.SubstEnv {
+		val := os.Getenv(env)
+		_, err = tempScriptFile.WriteString(fmt.Sprintf("export %s=%q\n", env, val))
+		if err != nil {
+			return err
+		}
+	}
+	for k, v := range opts.Env {
+		_, err = tempScriptFile.WriteString(fmt.Sprintf("export %s=%q\n", k, v))
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = tempScriptFile.WriteString(command)
+	if err != nil {
+		return err
+	}
+
+	err = m.CopyFileToPod(pod, tempScriptFile.Name(), scriptPath, 3)
+	if err != nil {
+		return err
+	}
+
+	log.Infof("%v Running '%v' command", logz.LogPod(), color.YellowString(command))
+
+	runOpts := operatorkclient.RunCommandInPodOptions{
+		Context:       ctx,
+		Timeout:       timeout,
+		Command:       fmt.Sprintf("sh %s", scriptPath),
+		PodName:       pod.Name,
+		PodNamespace:  pod.Namespace,
+		ContainerName: Namespace,
+		Stdout:        os.Stdout,
+		Stderr:        os.Stderr,
+	}
+
+	_, _, err = operatorkclient.RunCommandInPodWithOptions(runOpts)
+	return err
 }
 
 func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) error {

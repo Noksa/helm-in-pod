@@ -231,3 +231,74 @@ func (m *Manager) GetPodPhase(ctx context.Context, pod *corev1.Pod) (corev1.PodP
 	}
 	return myPod.Status.Phase, nil
 }
+
+func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, error) {
+	// Check if daemon pod already exists
+	_, err := m.GetDaemonPod(opts.Name)
+	if err == nil {
+		return nil, fmt.Errorf("daemon pod '%s' already exists", opts.Name)
+	}
+
+	log.Infof("%v Creating daemon pod '%v'", logz.LogHost(), opts.Name)
+
+	podSpec, err := buildDaemonPodSpec(opts.ExecOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	labels := map[string]string{"daemon": opts.Name}
+	maps.Copy(labels, opts.Labels)
+	annotations := map[string]string{}
+	maps.Copy(annotations, opts.Annotations)
+
+	pod, err := m.clientSet.CoreV1().Pods(Namespace).Create(m.ctx, &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        fmt.Sprintf("daemon-%s", opts.Name),
+			Labels:      labels,
+			Annotations: annotations,
+		},
+		Spec: podSpec,
+	}, metav1.CreateOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debugf("%v Daemon pod %v has been created", logz.LogHost(), pod.Name)
+	return pod, m.waitUntilPodIsRunning(pod)
+}
+
+func (m *Manager) GetDaemonPod(name string) (*corev1.Pod, error) {
+	podName := fmt.Sprintf("daemon-%s", name)
+	pod, err := m.clientSet.CoreV1().Pods(Namespace).Get(m.ctx, podName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("daemon pod '%s' not found: %w", name, err)
+	}
+	return pod, nil
+}
+
+func (m *Manager) DeleteDaemonPod(name string) error {
+	podName := fmt.Sprintf("daemon-%s", name)
+	log.Infof("%v Deleting daemon pod '%v'", logz.LogHost(), podName)
+	err := m.clientSet.CoreV1().Pods(Namespace).Delete(m.ctx, podName, metav1.DeleteOptions{})
+	if err != nil {
+		return err
+	}
+	log.Infof("%v Daemon pod '%v' has been deleted", logz.LogHost(), podName)
+	return nil
+}
+
+func (m *Manager) AnnotatePod(pod *corev1.Pod, annotations map[string]string) error {
+	// Get latest pod state
+	latestPod, err := m.clientSet.CoreV1().Pods(pod.Namespace).Get(m.ctx, pod.Name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	if latestPod.Annotations == nil {
+		latestPod.Annotations = make(map[string]string)
+	}
+	maps.Copy(latestPod.Annotations, annotations)
+	_, err = m.clientSet.CoreV1().Pods(latestPod.Namespace).Update(m.ctx, latestPod, metav1.UpdateOptions{})
+	pod = latestPod
+	return err
+}

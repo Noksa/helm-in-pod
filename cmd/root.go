@@ -17,7 +17,8 @@ func newRootCmd() *cobra.Command {
 	}
 	rootCmd.AddCommand(
 		newExecCmd(),
-		newPurgeCmd())
+		newPurgeCmd(),
+		newDaemonCmd())
 
 	startTime := time.Now()
 	var debug bool
