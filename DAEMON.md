@@ -33,6 +33,11 @@ helm in-pod daemon start --name my-daemon --copy-repo
 
 All `exec` flags work: `--image`, `--cpu`, `--memory`, `--tolerations`, `--node-selector`, `--env`, `--copy`, etc.
 
+**Force recreate** if daemon already exists:
+```bash
+helm in-pod daemon start --name my-daemon --copy-repo --force
+```
+
 ### 2️⃣ Execute Commands
 
 ```bash
@@ -161,6 +166,7 @@ All flags from `exec` command:
 - Helm: `--copy-repo`, `--update-repo`
 - Files: `--copy`
 - Environment: `--env`, `--subst-env`
+- `--force`, `-f` - Force recreate daemon pod if it already exists
 
 ### `daemon exec`
 Runtime flags only (pod already exists):

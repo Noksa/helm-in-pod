@@ -150,6 +150,32 @@ func (m *Manager) waitUntilPodIsRunning(pod *corev1.Pod) error {
 	return fmt.Errorf("timeout waiting pod readiness")
 }
 
+func (m *Manager) waitUntilPodIsDeleted(podName string) error {
+	log.Debugf("%v Waiting for pod %v to be deleted", logz.LogHost(), color.CyanString(podName))
+
+	timeout := time.Minute * 2
+	start := time.Now()
+
+	for time.Since(start) <= timeout {
+		_, err := m.clientSet.CoreV1().Pods(Namespace).Get(m.ctx, podName, metav1.GetOptions{})
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				log.Infof("%v Pod %v has been deleted", logz.LogHost(), color.CyanString(podName))
+				return nil
+			}
+			return fmt.Errorf("error checking pod status: %w", err)
+		}
+
+		if m.interrupted {
+			return fmt.Errorf("interrupted while waiting for pod deletion")
+		}
+
+		time.Sleep(time.Second)
+	}
+
+	return fmt.Errorf("timeout waiting for pod deletion")
+}
+
 func (m *Manager) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string, attempts int) error {
 	buffer := &bytes.Buffer{}
 	srcPath = filepath.Clean(srcPath)
@@ -236,7 +262,13 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 	// Check if daemon pod already exists
 	_, err := m.GetDaemonPod(opts.Name)
 	if err == nil {
-		return nil, fmt.Errorf("daemon pod '%s' already exists", opts.Name)
+		if !opts.Force {
+			return nil, fmt.Errorf("daemon pod '%s' already exists. Use --force to recreate", opts.Name)
+		}
+		log.Infof("%v Force flag enabled, recreating daemon pod %v", logz.LogHost(), color.CyanString(opts.Name))
+		if err := m.DeleteDaemonPod(opts.Name); err != nil {
+			return nil, fmt.Errorf("failed to delete existing daemon pod: %w", err)
+		}
 	}
 
 	log.Infof("%v Creating daemon pod '%v'", logz.LogHost(), opts.Name)
@@ -277,13 +309,13 @@ func (m *Manager) GetDaemonPod(name string) (*corev1.Pod, error) {
 
 func (m *Manager) DeleteDaemonPod(name string) error {
 	podName := fmt.Sprintf("daemon-%s", name)
-	log.Infof("%v Deleting daemon pod '%v'", logz.LogHost(), podName)
+	log.Infof("%v Deleting daemon pod %v", logz.LogHost(), color.CyanString(podName))
 	err := m.clientSet.CoreV1().Pods(Namespace).Delete(m.ctx, podName, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
-	log.Infof("%v Daemon pod '%v' has been deleted", logz.LogHost(), podName)
-	return nil
+
+	return m.waitUntilPodIsDeleted(podName)
 }
 
 func (m *Manager) AnnotatePod(pod *corev1.Pod, annotations map[string]string) error {

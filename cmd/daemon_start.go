@@ -116,6 +116,7 @@ func newDaemonStartCmd() *cobra.Command {
 	}
 
 	startCmd.Flags().StringVar(&opts.Name, "name", "", "Daemon name (required)")
+	startCmd.Flags().BoolVarP(&opts.Force, "force", "f", false, "Force recreate daemon pod if it already exists")
 	addExecOptionsFlags(startCmd, &opts.ExecOptions)
 
 	return startCmd
