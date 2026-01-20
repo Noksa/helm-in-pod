@@ -3,3 +3,5 @@ generated/
 inpod
 in-pod
 helm-in-pod
+coverage.out
+coverage.html

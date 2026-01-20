@@ -28,8 +28,6 @@ After completing ANY code changes, you MUST:
 
 - `README.md` - Main project documentation, usage examples
 - `DAEMON.md` - Daemon mode specific documentation
-- `CONTRIBUTING.md` - Contribution guidelines
-- `CHANGELOG.md` - Version history and changes
 - Any other `.md` files in the root directory
 
 ## When to Update
