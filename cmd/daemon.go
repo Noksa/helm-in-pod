@@ -12,6 +12,7 @@ func newDaemonCmd() *cobra.Command {
 	daemonCmd.AddCommand(
 		newDaemonStartCmd(),
 		newDaemonStopCmd(),
-		newDaemonExecCmd())
+		newDaemonExecCmd(),
+		newDaemonShellCmd())
 	return daemonCmd
 }

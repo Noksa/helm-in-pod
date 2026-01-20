@@ -341,3 +341,41 @@ func (m *Manager) AnnotatePod(pod *corev1.Pod, annotations map[string]string) er
 		return nil
 	})
 }
+
+func (m *Manager) OpenInteractiveShell(ctx context.Context, pod *corev1.Pod, shell string) error {
+	req := m.clientSet.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(pod.Name).
+		Namespace(pod.Namespace).
+		SubResource("exec")
+
+	req.VersionedParams(&corev1.PodExecOptions{
+		Container: Namespace,
+		Command:   []string{shell},
+		Stdin:     true,
+		Stdout:    true,
+		Stderr:    true,
+		TTY:       true,
+	}, scheme.ParameterCodec)
+
+	exec, err := remotecommand.NewSPDYExecutor(operatorkclient.GetClientConfig(), "POST", req.URL())
+	if err != nil {
+		return err
+	}
+
+	// Set up terminal for raw mode
+	oldState, err := setupTerminal()
+	if err != nil {
+		return fmt.Errorf("failed to setup terminal: %w", err)
+	}
+	defer func() {
+		_ = restoreTerminal(oldState)
+	}()
+
+	return exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+		Stdin:  os.Stdin,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+		Tty:    true,
+	})
+}

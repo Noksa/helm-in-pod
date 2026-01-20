@@ -62,6 +62,9 @@ helm in-pod daemon start --name dev --copy-repo
 helm in-pod daemon exec --name dev -- "helm list -A"
 helm in-pod daemon exec --name dev -- "helm upgrade myapp ..."
 
+# Or open an interactive shell 🐚
+helm in-pod daemon shell --name dev
+
 # Stop when done
 helm in-pod daemon stop --name dev
 ```
