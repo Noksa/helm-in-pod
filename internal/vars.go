@@ -24,10 +24,6 @@ func getClientConfig() *rest.Config {
 		configOverrides.CurrentContext = ctx
 	}
 
-	if ns := os.Getenv("HELM_NAMESPACE"); ns != "" {
-		configOverrides.Context.Namespace = ns
-	}
-
 	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
 	config, err := kubeConfig.ClientConfig()
 	if err != nil {
