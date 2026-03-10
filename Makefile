@@ -3,77 +3,95 @@ SHELL = /usr/bin/env bash -o pipefail
 
 .DEFAULT_GOAL = help
 
-# Colors for pretty output
-CYAN := \033[36m
-YELLOW := \033[1;33m
-GREEN := \033[32m
-RED := \033[31m
-BLUE := \033[1;34m
-MAGENTA := \033[35m
-RESET := \033[0m
+# Cyberpunk theme cache
+CYBER_CACHE := .cyber.sh
+CYBER_URL := https://raw.githubusercontent.com/Noksa/install-scripts/main/cyberpunk.sh
 
 # Project metadata
 VERSION := $(shell grep 'version:' plugin.yaml | cut -d '"' -f 2)
 GO_VERSION := $(shell go version | cut -d ' ' -f 3)
 
-##@ 🎯 Help & Information
+# Ginkgo
+GINKGO_BIN := $(shell go env GOPATH)/bin/ginkgo
+
+$(CYBER_CACHE):
+	@curl -s $(CYBER_URL) > $(CYBER_CACHE)
+
 .PHONY: help
-help: ## Show this help message with available targets
-	@printf "\n$(BLUE)╔══════════════════════════════════════════════════════════════╗$(RESET)\n"
-	@printf "$(BLUE)║  🚀 Helm In Pod - Run Helm commands inside Kubernetes pods  ║$(RESET)\n"
-	@printf "$(BLUE)╚══════════════════════════════════════════════════════════════╝$(RESET)\n"
-	@printf "\n$(MAGENTA)📦 Version:$(RESET) $(VERSION)  $(MAGENTA)🔧 Go:$(RESET) $(GO_VERSION)\n"
-	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2 } /^##@/ { printf "\n$(YELLOW)%s$(RESET)\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
-	@printf "\n"
+help: $(CYBER_CACHE) ## Show help
+	@source $(CYBER_CACHE) && { \
+		echo ""; \
+		echo -e "$${CYBER_D}╔═══════════════════════════════════════╗$${CYBER_X}"; \
+		echo -e "$${CYBER_D}║$${CYBER_X}  $${CYBER_M}🚀$${CYBER_X} $${CYBER_B}$${CYBER_C}Helm In Pod$${CYBER_X}"; \
+		echo -e "$${CYBER_D}╚═══════════════════════════════════════╝$${CYBER_X}"; \
+		echo -e "$${CYBER_D}│$${CYBER_X} $${CYBER_W}Version:$${CYBER_X} $${CYBER_G}$(VERSION)$${CYBER_X}"; \
+		echo -e "$${CYBER_D}│$${CYBER_X} $${CYBER_W}Go:$${CYBER_X} $${CYBER_G}$(GO_VERSION)$${CYBER_X}"; \
+		echo ""; \
+	}
+	@awk 'BEGIN {FS = ":.*##"; printf "\n\033[36mUsage:\033[0m make \033[35m<target>\033[0m\n\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-20s\033[0m \033[37m%s\033[0m\n", $$1, $$2 } /^##@/ { printf "\n\033[35m⚡ %s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
-.PHONY: version
-version: ## Show current version
-	@printf "$(GREEN)Version: $(VERSION)$(RESET)\n"
+.PHONY: cyber-update
+cyber-update: ## Update cyberpunk theme
+	@rm -f $(CYBER_CACHE)
+	@curl -s $(CYBER_URL) > $(CYBER_CACHE)
+	@source $(CYBER_CACHE) && cyber_ok "Cyberpunk theme updated"
 
-##@ 🛠️  Development
+##@ Development
+
 .PHONY: lint
 lint: ## Run linters and formatters
-	@printf "$(BLUE)🔍 Running linters and formatters...$(RESET)\n"
 	@./scripts/check.sh
-	@printf "$(GREEN)✓ Linting complete!$(RESET)\n"
 
 .PHONY: tidy
-tidy: ## Tidy go modules
-	@printf "$(BLUE)📦 Tidying go modules...$(RESET)\n"
+tidy: $(CYBER_CACHE) ## Tidy go modules
+	@source $(CYBER_CACHE) && cyber_log "Tidying go modules"
 	@go mod tidy
-	@printf "$(GREEN)✓ Modules tidied!$(RESET)\n"
+	@source $(CYBER_CACHE) && cyber_ok "Modules tidied"
 
-##@ 🧪 Testing
+.PHONY: install-local
+install-local: ## Build and install plugin locally for testing
+	@./scripts/install-local.sh
+
+##@ Testing
+
+$(GINKGO_BIN):
+	@go install github.com/onsi/ginkgo/v2/ginkgo@latest
+
 .PHONY: test
-test: ## Run tests
-	@printf "$(BLUE)🧪 Running tests...$(RESET)\n"
-	@go test -v ./...
-	@printf "$(GREEN)✓ Tests passed!$(RESET)\n"
+test: $(GINKGO_BIN) ## Run tests with Ginkgo
+	@$(GINKGO_BIN) -r --silence-skips
+
+.PHONY: test-verbose
+test-verbose: $(GINKGO_BIN) ## Run tests with verbose output
+	@$(GINKGO_BIN) -r -v
 
 .PHONY: test-coverage
-test-coverage: ## Run tests with coverage report
-	@printf "$(BLUE)📊 Running tests with coverage...$(RESET)\n"
-	@go test -v -coverprofile=coverage.out ./...
+test-coverage: $(GINKGO_BIN) $(CYBER_CACHE) ## Run tests with coverage
+	@$(GINKGO_BIN) -r --cover --coverprofile=coverage.out
 	@go tool cover -html=coverage.out -o coverage.html
-	@printf "$(GREEN)✓ Coverage report generated: coverage.html$(RESET)\n"
+	@source $(CYBER_CACHE) && cyber_ok "Coverage report: $${CYBER_G}coverage.html$${CYBER_X}"
 
-##@ 🏗️  Build
+.PHONY: test-plugin
+test-plugin: ## Test plugin as Helm plugin (integration test)
+	@./scripts/test-plugin.sh
+
+##@ Build
+
 .PHONY: build
-build: ## Build binary for current platform
-	@printf "$(BLUE)🔨 Building binary...$(RESET)\n"
+build: $(CYBER_CACHE) ## Build binary for current platform
+	@source $(CYBER_CACHE) && cyber_log "Building binary"
 	@go build -o bin/in-pod main.go
-	@printf "$(GREEN)✓ Binary built: bin/in-pod$(RESET)\n"
+	@source $(CYBER_CACHE) && cyber_ok "Binary: $${CYBER_G}bin/in-pod$${CYBER_X}"
 
 .PHONY: binaries
-binaries: version ## Build release binaries for all platforms
-	@printf "$(BLUE)📦 Building release binaries for all platforms...$(RESET)\n"
-	@cd scripts && ./make_archieve.sh
-	@printf "$(GREEN)✓ Binaries created in generated/$(RESET)\n"
-	@ls -lh generated/
+binaries: ## Build release binaries for all platforms
+	@./scripts/make_archieve.sh
 
-##@ 🧹 Cleanup
+##@ Cleanup
+
 .PHONY: clean
-clean: ## Clean build artifacts and generated files
-	@printf "$(BLUE)🧹 Cleaning up...$(RESET)\n"
+clean: $(CYBER_CACHE) ## Clean build artifacts
+	@source $(CYBER_CACHE) && cyber_log "Cleaning up"
 	@rm -rf bin/ generated/ coverage.out coverage.html
-	@printf "$(GREEN)✓ Cleaned!$(RESET)\n"
+	@source $(CYBER_CACHE) && cyber_ok "Cleaned"
+

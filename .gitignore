@@ -5,3 +5,5 @@ in-pod
 helm-in-pod
 coverage.out
 coverage.html
+.cyber.sh
+.helm-plugin-dev/

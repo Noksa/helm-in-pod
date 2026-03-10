@@ -4,10 +4,11 @@ import (
 	"context"
 	"os"
 
-	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/noksa/helm-in-pod/internal/hipns"
 	"github.com/noksa/helm-in-pod/internal/hippod"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (
@@ -15,8 +16,28 @@ var (
 	Pod       *hippod.Manager
 )
 
+func getClientConfig() *rest.Config {
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	configOverrides := &clientcmd.ConfigOverrides{}
+
+	if ctx := os.Getenv("HELM_KUBECONTEXT"); ctx != "" {
+		configOverrides.CurrentContext = ctx
+	}
+
+	if ns := os.Getenv("HELM_NAMESPACE"); ns != "" {
+		configOverrides.Context.Namespace = ns
+	}
+
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
+	config, err := kubeConfig.ClientConfig()
+	if err != nil {
+		panic(err)
+	}
+	return config
+}
+
 func init() {
-	clientSet := kubernetes.NewForConfigOrDie(operatorkclient.GetClientConfig())
+	clientSet := kubernetes.NewForConfigOrDie(getClientConfig())
 	hostname, _ := os.Hostname()
 	ctx := context.Background()
 
