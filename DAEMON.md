@@ -65,7 +65,25 @@ helm in-pod daemon exec --name my-daemon \
 helm in-pod daemon exec --name my-daemon --update-all-repos -- "helm upgrade ..."
 ```
 
-### 3️⃣ Stop the Daemon
+### 3️⃣ Interactive Shell (NEW!)
+
+```bash
+# Open an interactive shell with full Helm context
+helm in-pod daemon shell --name my-daemon
+
+# Use a different shell (bash, zsh, etc.)
+helm in-pod daemon shell --name my-daemon --shell bash
+```
+
+All Helm repositories and configurations are already set up. Perfect for:
+- Interactive debugging
+- Exploring the cluster environment
+- Running multiple commands manually
+- Testing Helm operations before scripting
+
+Type `exit` or press `Ctrl+D` to close the shell.
+
+### 4️⃣ Stop the Daemon
 
 ```bash
 helm in-pod daemon stop --name my-daemon
@@ -138,10 +156,19 @@ helm in-pod daemon start --name dev \
   --copy ~/.kube/config:/tmp/kubeconfig \
   --copy-repo
 
-# Iterate quickly
+# Option 1: Execute commands one by one
 helm in-pod daemon exec --name dev -- "helm diff upgrade ..."
 helm in-pod daemon exec --name dev -- "helm upgrade --dry-run ..."
 helm in-pod daemon exec --name dev -- "helm upgrade ..."
+
+# Option 2: Open interactive shell for exploration
+helm in-pod daemon shell --name dev
+# Now you're inside the pod with full Helm context!
+# Run commands interactively:
+#   helm list -A
+#   kubectl get pods
+#   helm diff upgrade myapp ...
+#   exit
 
 # Keep daemon running for the day
 # Stop when done
@@ -180,6 +207,10 @@ Runtime flags only (pod already exists):
 - `--update-all-repos` - Update all repos
 - `--copy-attempts`, `--update-repo-attempts`
 
+### `daemon shell`
+- `--name` - Daemon name (required)
+- `--shell` - Shell to use (default: sh, options: bash, zsh, etc.)
+
 ### `daemon stop`
 - `--name` - Daemon name (required)
 
@@ -199,6 +230,7 @@ Runtime flags only (pod already exists):
 - Set environment variables per-command for different contexts
 - Run multiple daemons with different names for isolation
 - Daemon pods are named `daemon-<name>` - you can see them with `kubectl get pods -n helm-in-pod`
+- **Use `daemon shell`** for interactive debugging and exploration with full Helm context
 
 ## 🆚 When to Use What?
 
@@ -207,9 +239,14 @@ Runtime flags only (pod already exists):
 - Need complete isolation per command
 - Don't care about startup time
 
-**Use `daemon`** when:
+**Use `daemon exec`** when:
 - Running multiple commands
 - Need fast execution
 - Want to preserve state (repos, files)
-- Working interactively
-- CI/CD with multiple steps
+- Working in CI/CD with multiple steps
+
+**Use `daemon shell`** when:
+- Need interactive debugging
+- Exploring cluster environment
+- Testing commands before scripting
+- Running ad-hoc operations manually
