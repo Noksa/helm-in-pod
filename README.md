@@ -30,7 +30,7 @@ When `helm` runs commands from your local machine, network latency to distant Ku
 
 ## 📋 Requirements
 
-- 🎯 **Helm 3** installed on host machine
+- 🎯 **Helm 3 or Helm 4** installed on host machine
 
 ---
 
@@ -39,9 +39,16 @@ When `helm` runs commands from your local machine, network latency to distant Ku
 <details>
 <summary>📥 <strong>Quick Install/Update</strong></summary>
 
+**For Helm 4:**
 ```bash
 # Install or update the plugin
-(helm plugin uninstall in-pod || true) && helm plugin install --verify=false https://github.com/Noksa/helm-in-pod
+(helm plugin uninstall in-pod || true) && helm plugin install --verify=false --version=main https://github.com/Noksa/helm-in-pod
+```
+
+**For Helm 3:**
+```bash
+# Install or update the plugin
+(helm plugin uninstall in-pod || true) && helm plugin install --version=main https://github.com/Noksa/helm-in-pod
 ```
 
 > 💡 You can specify any existing version from the releases page
