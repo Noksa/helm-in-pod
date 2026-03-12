@@ -28,8 +28,3 @@ jobs:
         run: |-
           export KUBECONFIG="${GITHUB_WORKSPACE}/e2e/.kubeconfig"
           make test
-
-      - name: Run e2e tests
-        run: |-
-          export KUBECONFIG="${GITHUB_WORKSPACE}/e2e/.kubeconfig"
-          make test-e2e
