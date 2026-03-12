@@ -20,8 +20,15 @@ jobs:
         with:
           install_only: true
 
+      - name: Install kind cluster
+        run: make test-e2e-setup
+
       - name: Run unit tests
-        run: make test
+        run: |-
+          export KUBECONFIG="${$GITHUB_WORKSPACE}/e2e/.kubeconfig"
+          make test
 
       - name: Run e2e tests
-        run: make test-e2e-full
+        run: |-
+          export KUBECONFIG="${$GITHUB_WORKSPACE}/e2e/.kubeconfig"
+          make test-e2e
