@@ -93,7 +93,7 @@ func addPodCreationFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions) {
 	cmd.Flags().StringToStringVar(&opts.NodeSelector, "node-selector", map[string]string{}, "Pod's node selectors. Examples: 'node-role.kubernetes.io/control-plane=\"\"', 'disktype=ssd'")
 	cmd.Flags().StringVar(&opts.ImagePullSecret, "image-pull-secret", "", "Specify an image pull secret which should be used to pull --image from private repository")
 	cmd.Flags().StringVar(&opts.PullPolicy, "pull-policy", "IfNotPresent", "Image pull policy to use in helm pod")
-	cmd.Flags().StringVarP(&opts.Image, "image", "i", "docker.io/noksa/kubectl-helm:v1.34.2-v4.0.4", "An image which will be used")
+	cmd.Flags().StringVarP(&opts.Image, "image", "i", "docker.io/noksa/kubectl-helm:v1.34.5-v4.1.1", "An image which will be used")
 }
 
 func addRuntimeFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions, copyRepoDefault bool) {
