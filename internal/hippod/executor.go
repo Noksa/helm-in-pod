@@ -343,7 +343,7 @@ func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, c
 
 	_, _, err = operatorkclient.RunCommandInPodWithOptions(runOpts)
 	if err != nil {
-		if code := parseExitCodeFromError(err); code >= 0 {
+		if code := parseExitCodeFromError(err); code != hiperrors.ExitCodeUnknown {
 			log.Infof("%v Command exited with code %d", logz.LogPod(), code)
 			return &hiperrors.ExitCodeError{Code: int32(code)}
 		}
@@ -375,7 +375,7 @@ func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) err
 		}
 		// Extract the actual exit code from the container status
 		exitCode := m.getContainerExitCode(pod)
-		if exitCode >= 0 {
+		if exitCode != hiperrors.ExitCodeUnknown {
 			log.Infof("%v Command exited with code %d", logz.LogPod(), exitCode)
 			return &hiperrors.ExitCodeError{Code: exitCode}
 		}
@@ -388,38 +388,39 @@ func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) err
 }
 
 // getContainerExitCode retrieves the exit code from the pod's container status.
-// Returns -1 if the exit code cannot be determined.
+// Returns ExitCodeUnknown if the exit code cannot be determined.
 func (m *Manager) getContainerExitCode(pod *corev1.Pod) int32 {
 	myPod, err := m.clientSet.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
 	if err != nil {
-		return -1
+		return hiperrors.ExitCodeUnknown
 	}
 	return exitCodeFromContainerStatuses(myPod.Status.ContainerStatuses)
 }
 
 // exitCodeFromContainerStatuses extracts the exit code from container statuses.
-// Returns -1 if no terminated container is found.
+// Returns ExitCodeUnknown if no terminated container is found.
 func exitCodeFromContainerStatuses(statuses []corev1.ContainerStatus) int32 {
 	for _, cs := range statuses {
 		if cs.State.Terminated != nil {
 			return cs.State.Terminated.ExitCode
 		}
 	}
-	return -1
+	return hiperrors.ExitCodeUnknown
 }
 
 // parseExitCodeFromError attempts to extract an exit code from an error message.
 // The Kubernetes remotecommand executor produces messages like
 // "command terminated with exit code N" which get wrapped by operatorkclient.
+// Returns ExitCodeUnknown if the exit code cannot be determined.
 func parseExitCodeFromError(err error) int {
 	if err == nil {
-		return -1
+		return hiperrors.ExitCodeUnknown
 	}
 	msg := err.Error()
 	const prefix = "exit code "
 	idx := strings.LastIndex(msg, prefix)
 	if idx < 0 {
-		return -1
+		return hiperrors.ExitCodeUnknown
 	}
 	codeStr := strings.TrimSpace(msg[idx+len(prefix):])
 	// Take only digits
@@ -428,7 +429,7 @@ func parseExitCodeFromError(err error) int {
 		end++
 	}
 	if end == 0 {
-		return -1
+		return hiperrors.ExitCodeUnknown
 	}
 	code := 0
 	for _, c := range codeStr[:end] {

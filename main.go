@@ -18,6 +18,5 @@ func main() {
 			os.Exit(int(exitErr.Code))
 		}
 		log.Fatalf("%s", err.Error())
-		os.Exit(100)
 	}
 }

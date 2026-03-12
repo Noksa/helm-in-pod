@@ -37,4 +37,22 @@ var _ = Describe("ExitCodeError", func() {
 		err := &ExitCodeError{Code: 0}
 		Expect(err.Error()).To(Equal("command exited with code 0"))
 	})
+
+	It("should match errors.Is for same exit code", func() {
+		err := &ExitCodeError{Code: 42}
+		target := &ExitCodeError{Code: 42}
+		Expect(errors.Is(err, target)).To(BeTrue())
+	})
+
+	It("should not match errors.Is for different exit codes", func() {
+		err := &ExitCodeError{Code: 42}
+		target := &ExitCodeError{Code: 1}
+		Expect(errors.Is(err, target)).To(BeFalse())
+	})
+
+	It("should not match errors.Is for unrelated errors", func() {
+		err := &ExitCodeError{Code: 42}
+		target := fmt.Errorf("some other error")
+		Expect(errors.Is(err, target)).To(BeFalse())
+	})
 })
