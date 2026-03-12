@@ -1,6 +1,6 @@
 module github.com/noksa/helm-in-pod
 
-go 1.25
+go 1.26
 
 require (
 	github.com/Noksa/operator-home v0.18.4
