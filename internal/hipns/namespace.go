@@ -36,7 +36,7 @@ func (m *Manager) PrepareNs() error {
 		_, err = m.clientSet.CoreV1().Namespaces().Create(m.ctx, &v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: Name},
 		}, metav1.CreateOptions{})
-		if err != nil {
+		if err != nil && client.IgnoreAlreadyExists(err) != nil {
 			return err
 		}
 	}
@@ -49,7 +49,7 @@ func (m *Manager) PrepareNs() error {
 		_, err = m.clientSet.CoreV1().ServiceAccounts(Name).Create(m.ctx, &v1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{Name: Name},
 		}, metav1.CreateOptions{})
-		if err != nil {
+		if err != nil && client.IgnoreAlreadyExists(err) != nil {
 			return err
 		}
 	}
@@ -72,8 +72,11 @@ func (m *Manager) CreateClusterRoleBinding() error {
 				Name:     "cluster-admin",
 			},
 		}, metav1.CreateOptions{})
+		if err != nil && client.IgnoreAlreadyExists(err) != nil {
+			return err
+		}
 	}
-	return err
+	return nil
 }
 
 func (m *Manager) DeleteClusterRoleBinding() error {

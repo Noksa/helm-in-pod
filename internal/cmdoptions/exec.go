@@ -10,8 +10,12 @@ type ExecOptions struct {
 	Annotations     map[string]string
 	UpdateRepo      []string
 	UpdateAllRepos  bool
-	Cpu             string
-	Memory          string
+	Cpu             string // Deprecated: use CpuRequest instead
+	Memory          string // Deprecated: use MemoryRequest instead
+	CpuRequest      string
+	CpuLimit        string
+	MemoryRequest   string
+	MemoryLimit     string
 	Env             map[string]string
 	FilesAsMap      map[string]string
 	SubstEnv        []string
@@ -22,6 +26,7 @@ type ExecOptions struct {
 	ImagePullSecret string
 	PullPolicy      string
 	HostNetwork     bool
+	CreatePDB       bool
 	// Timeout is duration from --timeout flag + 10 minutes
 	// set internally
 	Timeout            time.Duration

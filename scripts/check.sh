@@ -21,11 +21,14 @@ goimports -w .
 
 cyber_log "Running go vet"
 go vet ./...
+go vet -tags=e2e ./e2e/
 
 cyber_log "Running modernize"
 go run golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize@latest -fix ./...
+go run golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize@latest -fix -tags=e2e ./...
 
 cyber_log "Running golangci-lint"
 golangci-lint run
+golangci-lint run --build-tags=e2e ./e2e/
 
 cyber_ok "All checks passed"

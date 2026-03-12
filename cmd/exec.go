@@ -14,7 +14,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"go.uber.org/multierr"
 )
 
 func newExecCmd() *cobra.Command {
@@ -25,7 +24,7 @@ func newExecCmd() *cobra.Command {
 	}
 	opts := cmdoptions.ExecOptions{}
 	addExecOptionsFlags(execCmd, &opts)
-	execCmd.RunE = func(cmd *cobra.Command, args []string) error {
+	execCmd.RunE = func(cmd *cobra.Command, args []string) (returnErr error) {
 		if len(args) == 0 {
 			return fmt.Errorf("specify command to run. Run `helm in-pod exec --help` to check available options")
 		}
@@ -39,10 +38,12 @@ func newExecCmd() *cobra.Command {
 		timeout := viper.GetDuration("timeout")
 		opts.Timeout = timeout + time.Minute*10
 
-		var mErr error
-		defer multierr.AppendInvoke(&mErr, multierr.Invoke(func() error {
-			return internal.Pod.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
-		}))
+		defer func() {
+			cleanupErr := internal.Pod.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
+			if cleanupErr != nil && returnErr == nil {
+				returnErr = cleanupErr
+			}
+		}()
 
 		// Parse file mappings
 		if len(opts.Files) > 0 {

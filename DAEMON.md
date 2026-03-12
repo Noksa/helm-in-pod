@@ -1,6 +1,6 @@
 # ⚡ Daemon Mode
 
-> 🚀 **NEW**: Run commands in a persistent pod without recreation overhead!
+> 🚀 Run commands in a persistent pod without recreation overhead!
 
 ## 💡 The Problem
 
@@ -31,7 +31,7 @@ helm in-pod daemon stop --name dev
 helm in-pod daemon start --name my-daemon --copy-repo
 ```
 
-All `exec` flags work: `--image`, `--cpu`, `--memory`, `--tolerations`, `--node-selector`, `--env`, `--copy`, etc.
+All `exec` flags work: `--image`, `--cpu-request`, `--cpu-limit`, `--memory-request`, `--memory-limit`, `--tolerations`, `--node-selector`, `--env`, `--copy`, `--create-pdb`, etc.
 
 **Force recreate** if daemon already exists:
 ```bash
@@ -65,7 +65,7 @@ helm in-pod daemon exec --name my-daemon \
 helm in-pod daemon exec --name my-daemon --update-all-repos -- "helm upgrade ..."
 ```
 
-### 3️⃣ Interactive Shell (NEW!)
+### 3️⃣ Interactive Shell
 
 ```bash
 # Open an interactive shell with full Helm context
@@ -188,8 +188,9 @@ helm in-pod daemon stop --name dev
 
 ### `daemon start`
 All flags from `exec` command:
-- Pod creation: `--image`, `--cpu`, `--memory`, `--tolerations`, `--node-selector`, `--host-network`
+- Pod creation: `--image`, `--cpu-request`, `--cpu-limit`, `--memory-request`, `--memory-limit`, `--tolerations`, `--node-selector`, `--host-network`
 - Security: `--run-as-user`, `--run-as-group`, `--image-pull-secret`
+- Protection: `--create-pdb` (default: true) - Protects pod from voluntary disruptions
 - Helm: `--copy-repo`, `--update-repo`
 - Files: `--copy`
 - Environment: `--env`, `--subst-env`

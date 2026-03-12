@@ -18,3 +18,8 @@ source "$CYBER_LIB"
 
 # Set up trap for clean exit
 trap cyber_trap SIGINT SIGTERM
+
+# E2E test configuration
+E2E_CLUSTER_NAME="${KIND_CLUSTER:-helm-in-pod-e2e}"
+E2E_DIR="${PROJECT_DIR}/e2e"
+E2E_KUBECONFIG="${E2E_DIR}/.kubeconfig"

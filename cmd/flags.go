@@ -22,6 +22,51 @@ func getDaemonName(name string) (string, error) {
 func addExecOptionsFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions) {
 	addPodCreationFlags(cmd, opts)
 	addRuntimeFlags(cmd, opts, true)
+	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		return validateResourceFlags(cmd, opts)
+	}
+}
+
+func validateResourceFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions) error {
+	cpuChanged := cmd.Flags().Changed("cpu")
+	memoryChanged := cmd.Flags().Changed("memory")
+	cpuRequestChanged := cmd.Flags().Changed("cpu-request")
+	cpuLimitChanged := cmd.Flags().Changed("cpu-limit")
+	memoryRequestChanged := cmd.Flags().Changed("memory-request")
+	memoryLimitChanged := cmd.Flags().Changed("memory-limit")
+
+	// Check if old and new CPU flags are used together
+	if cpuChanged && (cpuRequestChanged || cpuLimitChanged) {
+		return fmt.Errorf("cannot use --cpu with --cpu-request or --cpu-limit")
+	}
+
+	// Check if old and new memory flags are used together
+	if memoryChanged && (memoryRequestChanged || memoryLimitChanged) {
+		return fmt.Errorf("cannot use --memory with --memory-request or --memory-limit")
+	}
+
+	// If new flags are not set, use defaults from old flags
+	if !cpuRequestChanged && !cpuLimitChanged && !cpuChanged {
+		// No flags set, use default
+		opts.CpuRequest = "1100m"
+		opts.CpuLimit = "1100m"
+	} else if cpuChanged {
+		// Old flag used, set both request and limit to same value
+		opts.CpuRequest = opts.Cpu
+		opts.CpuLimit = opts.Cpu
+	}
+
+	if !memoryRequestChanged && !memoryLimitChanged && !memoryChanged {
+		// No flags set, use default
+		opts.MemoryRequest = "500Mi"
+		opts.MemoryLimit = "500Mi"
+	} else if memoryChanged {
+		// Old flag used, set both request and limit to same value
+		opts.MemoryRequest = opts.Memory
+		opts.MemoryLimit = opts.Memory
+	}
+
+	return nil
 }
 
 func addPodCreationFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions) {
@@ -29,8 +74,20 @@ func addPodCreationFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions) {
 	cmd.Flags().Int64Var(&opts.RunAsGroup, "run-as-group", -1, "Run as group ID to be set in security context. Omitted if not specified and default from an image is used")
 	cmd.Flags().StringToStringVar(&opts.Labels, "labels", map[string]string{}, "Additional labels to be set on a pod")
 	cmd.Flags().StringToStringVar(&opts.Annotations, "annotations", map[string]string{}, "Additional annotations to be set on a pod")
-	cmd.Flags().StringVar(&opts.Cpu, "cpu", "1100m", "Pod's cpu request/limit")
-	cmd.Flags().StringVar(&opts.Memory, "memory", "500Mi", "Pod's memory request/limit")
+	cmd.Flags().BoolVar(&opts.CreatePDB, "create-pdb", true, "Create PodDisruptionBudget to protect the pod from voluntary disruptions during operations")
+
+	// Deprecated flags
+	cmd.Flags().StringVar(&opts.Cpu, "cpu", "1100m", "Pod's cpu request/limit (deprecated: use --cpu-request and --cpu-limit)")
+	cmd.Flags().StringVar(&opts.Memory, "memory", "500Mi", "Pod's memory request/limit (deprecated: use --memory-request and --memory-limit)")
+	_ = cmd.Flags().MarkDeprecated("cpu", "use --cpu-request and --cpu-limit instead")
+	_ = cmd.Flags().MarkDeprecated("memory", "use --memory-request and --memory-limit instead")
+
+	// New flags for separate requests and limits
+	cmd.Flags().StringVar(&opts.CpuRequest, "cpu-request", "", "Pod's cpu request")
+	cmd.Flags().StringVar(&opts.CpuLimit, "cpu-limit", "", "Pod's cpu limit (optional)")
+	cmd.Flags().StringVar(&opts.MemoryRequest, "memory-request", "", "Pod's memory request")
+	cmd.Flags().StringVar(&opts.MemoryLimit, "memory-limit", "", "Pod's memory limit (optional)")
+
 	cmd.Flags().BoolVar(&opts.HostNetwork, "host-network", false, "Use host network in a pod")
 	cmd.Flags().StringSliceVar(&opts.Tolerations, "tolerations", []string{}, "Pod's tolerations in format key=value:effect:operator. Examples: '::Exists' (all taints), 'key=::Exists' (key with any effect), 'key=:NoSchedule:Exists', 'key=value:NoSchedule:Equal'")
 	cmd.Flags().StringToStringVar(&opts.NodeSelector, "node-selector", map[string]string{}, "Pod's node selectors. Examples: 'node-role.kubernetes.io/control-plane=\"\"', 'disktype=ssd'")

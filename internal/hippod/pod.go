@@ -18,6 +18,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/helmtar"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/hipretry"
 	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
@@ -64,6 +65,14 @@ func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOption
 	}
 	for _, pod := range pods.Items {
 		log.Debugf("%v Deleting '%v' pod", logz.LogHost(), pod.Name)
+
+		// Extract operation ID from pod labels and delete associated PDB
+		if operationID, ok := pod.Labels[hipconsts.LabelOperationID]; ok {
+			if err := m.DeletePodDisruptionBudgets(context.Background(), operationID); err != nil {
+				log.Warnf("Failed to delete PodDisruptionBudget for operation %s: %v", operationID, err)
+			}
+		}
+
 		err = m.clientSet.CoreV1().Pods(Namespace).Delete(context.Background(), pod.Name, metav1.DeleteOptions{})
 		if err != nil {
 			return err
@@ -85,7 +94,13 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 		return nil, err
 	}
 
-	labels := map[string]string{"host": m.myHostname}
+	// Generate unique operation ID for this pod
+	operationID := GenerateOperationID()
+
+	labels := map[string]string{
+		"host":                     m.myHostname,
+		hipconsts.LabelOperationID: operationID,
+	}
 	maps.Copy(labels, opts.Labels)
 	annotations := map[string]string{}
 	maps.Copy(annotations, opts.Annotations)
@@ -102,6 +117,15 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 		return nil, err
 	}
 
+	// Create PodDisruptionBudget for this pod if enabled
+	if opts.CreatePDB {
+		if err := m.CreatePodDisruptionBudget(m.ctx, operationID); err != nil {
+			// If PDB creation fails, clean up the pod
+			_ = m.clientSet.CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{})
+			return nil, fmt.Errorf("failed to create PodDisruptionBudget: %w", err)
+		}
+	}
+
 	// Handle interrupt signals
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
@@ -112,6 +136,10 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 			destroyErr := m.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
 			if destroyErr != nil {
 				log.Errorf("Couldn't destroy helm pods: %v", destroyErr.Error())
+			}
+			// Clean up PDB if it was created
+			if opts.CreatePDB {
+				_ = m.DeletePodDisruptionBudgets(m.ctx, operationID)
 			}
 			m.interrupted = true
 		}
@@ -277,7 +305,14 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 	if err != nil {
 		return nil, err
 	}
-	labels := map[string]string{"daemon": opts.Name}
+
+	// Generate unique operation ID for this daemon pod
+	operationID := GenerateOperationID()
+
+	labels := map[string]string{
+		"daemon":                   opts.Name,
+		hipconsts.LabelOperationID: operationID,
+	}
 	maps.Copy(labels, opts.Labels)
 	annotations := map[string]string{}
 	maps.Copy(annotations, opts.Annotations)
@@ -292,6 +327,15 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 	}, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
+	}
+
+	// Create PodDisruptionBudget for this daemon pod if enabled
+	if opts.CreatePDB {
+		if err := m.CreatePodDisruptionBudget(m.ctx, operationID); err != nil {
+			// If PDB creation fails, clean up the pod
+			_ = m.clientSet.CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{})
+			return nil, fmt.Errorf("failed to create PodDisruptionBudget: %w", err)
+		}
 	}
 
 	log.Debugf("%v Daemon pod %v has been created", logz.LogHost(), pod.Name)
@@ -310,7 +354,19 @@ func (m *Manager) GetDaemonPod(name string) (*corev1.Pod, error) {
 func (m *Manager) DeleteDaemonPod(name string) error {
 	podName := fmt.Sprintf("daemon-%s", name)
 	log.Infof("%v Deleting daemon pod %v", logz.LogHost(), color.CyanString(podName))
-	err := m.clientSet.CoreV1().Pods(Namespace).Delete(m.ctx, podName, metav1.DeleteOptions{})
+
+	// Get the pod to extract operation ID before deletion
+	pod, err := m.clientSet.CoreV1().Pods(Namespace).Get(m.ctx, podName, metav1.GetOptions{})
+	if err == nil {
+		// Extract operation ID from pod labels and delete associated PDB
+		if operationID, ok := pod.Labels[hipconsts.LabelOperationID]; ok {
+			if err := m.DeletePodDisruptionBudgets(m.ctx, operationID); err != nil {
+				log.Warnf("Failed to delete PodDisruptionBudget for operation %s: %v", operationID, err)
+			}
+		}
+	}
+
+	err = m.clientSet.CoreV1().Pods(Namespace).Delete(m.ctx, podName, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}

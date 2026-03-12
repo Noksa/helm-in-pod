@@ -15,12 +15,14 @@ import (
 	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
+	"github.com/noksa/helm-in-pod/internal/hiperrors"
 	"github.com/noksa/helm-in-pod/internal/hipretry"
 	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
 	"go.uber.org/multierr"
 	"helm.sh/helm/v4/pkg/cli"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -188,7 +190,7 @@ func (m *Manager) CopyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions, ex
 func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command string, homeDirectory string, opts cmdoptions.ExecOptions) error {
 	scriptPath := fmt.Sprintf("%v/wrapped-script.sh", homeDirectory)
 
-	tempScriptFile, err := os.CreateTemp("", "helm-in-pod")
+	tempScriptFile, err := os.CreateTemp("", hipconsts.HelmInPodNamespace)
 	if err != nil {
 		return err
 	}
@@ -202,11 +204,15 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 		return err
 	}
 
-	_, err = tempScriptFile.WriteString("set -eu\n")
+	_, err = tempScriptFile.WriteString("#!/bin/sh\nset -eu\n")
 	if err != nil {
 		return err
 	}
 	_, err = tempScriptFile.WriteString(command)
+	if err != nil {
+		return err
+	}
+	_, err = tempScriptFile.WriteString("\n")
 	if err != nil {
 		return err
 	}
@@ -227,7 +233,7 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 		log.Warnf("%v Timed out!", logz.LogHost())
 		for {
 			_, _, err := operatorkclient.RunCommandInPod("kill -term 1",
-				"helm-in-pod", pod.Name, pod.Namespace, nil)
+				hipconsts.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 			if err == nil {
 				return
 			}
@@ -266,7 +272,7 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, command string, homeDirectory string, timeout time.Duration, opts cmdoptions.ExecOptions) error {
 	scriptPath := fmt.Sprintf("%v/wrapped-script.sh", homeDirectory)
 
-	tempScriptFile, err := os.CreateTemp("", "helm-in-pod")
+	tempScriptFile, err := os.CreateTemp("", hipconsts.HelmInPodNamespace)
 	if err != nil {
 		return err
 	}
@@ -336,6 +342,12 @@ func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, c
 	}
 
 	_, _, err = operatorkclient.RunCommandInPodWithOptions(runOpts)
+	if err != nil {
+		if code := parseExitCodeFromError(err); code >= 0 {
+			log.Infof("%v Command exited with code %d", logz.LogPod(), code)
+			return &hiperrors.ExitCodeError{Code: int32(code)}
+		}
+	}
 	return err
 }
 
@@ -361,10 +373,66 @@ func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) err
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		// Extract the actual exit code from the container status
+		exitCode := m.getContainerExitCode(pod)
+		if exitCode >= 0 {
+			log.Infof("%v Command exited with code %d", logz.LogPod(), exitCode)
+			return &hiperrors.ExitCodeError{Code: exitCode}
+		}
 		return fmt.Errorf("pod failed")
 	}
 	if phase == corev1.PodSucceeded {
 		return nil
 	}
 	return fmt.Errorf("unexpected pod phase: %v", phase)
+}
+
+// getContainerExitCode retrieves the exit code from the pod's container status.
+// Returns -1 if the exit code cannot be determined.
+func (m *Manager) getContainerExitCode(pod *corev1.Pod) int32 {
+	myPod, err := m.clientSet.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
+	if err != nil {
+		return -1
+	}
+	return exitCodeFromContainerStatuses(myPod.Status.ContainerStatuses)
+}
+
+// exitCodeFromContainerStatuses extracts the exit code from container statuses.
+// Returns -1 if no terminated container is found.
+func exitCodeFromContainerStatuses(statuses []corev1.ContainerStatus) int32 {
+	for _, cs := range statuses {
+		if cs.State.Terminated != nil {
+			return cs.State.Terminated.ExitCode
+		}
+	}
+	return -1
+}
+
+// parseExitCodeFromError attempts to extract an exit code from an error message.
+// The Kubernetes remotecommand executor produces messages like
+// "command terminated with exit code N" which get wrapped by operatorkclient.
+func parseExitCodeFromError(err error) int {
+	if err == nil {
+		return -1
+	}
+	msg := err.Error()
+	const prefix = "exit code "
+	idx := strings.LastIndex(msg, prefix)
+	if idx < 0 {
+		return -1
+	}
+	codeStr := strings.TrimSpace(msg[idx+len(prefix):])
+	// Take only digits
+	end := 0
+	for end < len(codeStr) && codeStr[end] >= '0' && codeStr[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return -1
+	}
+	code := 0
+	for _, c := range codeStr[:end] {
+		code = code*10 + int(c-'0')
+	}
+	return code
 }

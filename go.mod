@@ -5,6 +5,7 @@ go 1.25
 require (
 	github.com/Noksa/operator-home v0.18.4
 	github.com/fatih/color v1.18.0
+	github.com/google/uuid v1.6.0
 	github.com/noksa/go-helpers v0.0.0-20221015170552-c776d64423ef
 	github.com/onsi/ginkgo/v2 v2.28.1
 	github.com/onsi/gomega v1.39.1
@@ -47,7 +48,6 @@ require (
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20260115054156-294ebfa9ad83 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
