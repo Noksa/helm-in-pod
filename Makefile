@@ -52,6 +52,18 @@ tidy: $(CYBER_CACHE) ## Tidy go modules
 install-local: ## Build and install plugin locally for testing
 	@./scripts/install-local.sh
 
+.PHONY: install
+install: ## Uninstall and install specific version (use VERSION=xxx, e.g., VERSION=main or VERSION=v0.6.0-beta)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION is required. Usage: make install VERSION=main"; \
+		exit 1; \
+	fi
+	@echo "Uninstalling existing helm-in-pod plugin (if exists)..."
+	@helm plugin uninstall in-pod 2>/dev/null || true
+	@echo "Installing helm-in-pod version: $(VERSION)"
+	@helm plugin install https://github.com/Noksa/helm-in-pod --version=$(VERSION) --verify=false
+	@echo "Successfully installed helm-in-pod $(VERSION)"
+
 ##@ Testing
 
 $(GINKGO_BIN):
