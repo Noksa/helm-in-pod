@@ -23,8 +23,8 @@ var _ = Describe("PodDisruptionBudget", func() {
 	})
 
 	AfterEach(func() {
-		deleteNamespace(testNs)
 		logOnFailure(testNs)
+		deleteNamespace(testNs)
 	})
 
 	Context("when creating a helm-in-pod execution pod", func() {

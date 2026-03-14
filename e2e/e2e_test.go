@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	. "github.com/onsi/ginkgo/v2"
 )
 
@@ -53,16 +54,25 @@ func deleteNamespace(ns string) {
 	_, _ = Run(cmd)
 }
 
-// logOnFailure prints relevant logs when a test fails
+// logOnFailure prints relevant logs when a test fails.
+// Always call this BEFORE deleting namespaces or stopping daemons so pods still exist.
 func logOnFailure(ns string) {
-	if CurrentSpecReport().Failed() {
-		cmd := exec.Command("kubectl", "get", "pods", "-n", ns)
+	if !CurrentSpecReport().Failed() {
+		return
+	}
+	for _, namespace := range []string{ns, hipconsts.HelmInPodNamespace} {
+		if namespace == "" {
+			continue
+		}
+		GinkgoWriter.Printf("\n=== Pods in namespace %s ===\n", namespace)
+		cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-o", "wide")
 		output, _ := Run(cmd)
-		GinkgoWriter.Printf("\nPods in namespace %s:\n%s\n", ns, output)
+		GinkgoWriter.Printf("%s\n", output)
 
-		cmd = exec.Command("kubectl", "get", "pods", "-n", ns, "-o", "wide")
+		// describe all pods to get events and status
+		cmd = exec.Command("kubectl", "describe", "pods", "-n", namespace)
 		output, _ = Run(cmd)
-		GinkgoWriter.Printf("\nPods details:\n%s\n", output)
+		GinkgoWriter.Printf("\n=== Describe pods in %s ===\n%s\n", namespace, output)
 	}
 }
 

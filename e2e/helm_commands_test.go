@@ -37,7 +37,6 @@ var _ = Describe("Helm Commands", func() {
 
 	AfterEach(func() {
 		logOnFailure(testNS)
-		deleteNamespace(testNS)
 		By("cleaning up chart directory")
 		cleanupChart(chartDir)
 	})
