@@ -40,11 +40,13 @@ var _ = Describe("Copy Flag", func() {
 			filePath := filepath.Join(tmpDir, "test.txt")
 			Expect(os.WriteFile(filePath, []byte("hello from host"), 0644)).To(Succeed())
 
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--copy", fmt.Sprintf("%s:/tmp/test.txt", filePath),
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--copy", fmt.Sprintf("%s:/tmp/test.txt", filePath),
 				"--", "cat /tmp/test.txt")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(output).To(ContainSubstring("hello from host"))
@@ -54,11 +56,13 @@ var _ = Describe("Copy Flag", func() {
 			filePath := filepath.Join(tmpDir, "spaces.txt")
 			Expect(os.WriteFile(filePath, []byte("line 1\nline 2\nline 3"), 0644)).To(Succeed())
 
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--copy", fmt.Sprintf("%s:/tmp/spaces.txt", filePath),
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--copy", fmt.Sprintf("%s:/tmp/spaces.txt", filePath),
 				"--", "wc -l /tmp/spaces.txt")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(output).To(ContainSubstring("3"))
@@ -72,11 +76,13 @@ var _ = Describe("Copy Flag", func() {
 			Expect(os.WriteFile(filepath.Join(subDir, "a.txt"), []byte("file-a"), 0644)).To(Succeed())
 			Expect(os.WriteFile(filepath.Join(subDir, "b.txt"), []byte("file-b"), 0644)).To(Succeed())
 
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--copy", fmt.Sprintf("%s:/tmp/mydir", subDir),
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--copy", fmt.Sprintf("%s:/tmp/mydir", subDir),
 				"--", "sh -c 'cat /tmp/mydir/a.txt && echo --- && cat /tmp/mydir/b.txt'")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(output).To(ContainSubstring("file-a"))
@@ -88,11 +94,13 @@ var _ = Describe("Copy Flag", func() {
 			Expect(os.MkdirAll(nested, 0755)).To(Succeed())
 			Expect(os.WriteFile(filepath.Join(nested, "deep.txt"), []byte("deep-content"), 0644)).To(Succeed())
 
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--copy", fmt.Sprintf("%s:/tmp/parent", filepath.Join(tmpDir, "parent")),
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--copy", fmt.Sprintf("%s:/tmp/parent", filepath.Join(tmpDir, "parent")),
 				"--", "cat /tmp/parent/child/deep.txt")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(output).To(ContainSubstring("deep-content"))
@@ -106,12 +114,14 @@ var _ = Describe("Copy Flag", func() {
 			Expect(os.WriteFile(file1, []byte("first"), 0644)).To(Succeed())
 			Expect(os.WriteFile(file2, []byte("second"), 0644)).To(Succeed())
 
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--copy", fmt.Sprintf("%s:/tmp/one.txt", file1),
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--copy", fmt.Sprintf("%s:/tmp/one.txt", file1),
 				"--copy", fmt.Sprintf("%s:/tmp/two.txt", file2),
 				"--", "sh -c 'cat /tmp/one.txt && echo --- && cat /tmp/two.txt'")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(output).To(ContainSubstring("first"))
@@ -124,11 +134,13 @@ var _ = Describe("Copy Flag", func() {
 			Expect(os.WriteFile(file1, []byte("alpha-content"), 0644)).To(Succeed())
 			Expect(os.WriteFile(file2, []byte("beta-content"), 0644)).To(Succeed())
 
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--copy", fmt.Sprintf("%s:/tmp/alpha.txt,%s:/tmp/beta.txt", file1, file2),
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--copy", fmt.Sprintf("%s:/tmp/alpha.txt,%s:/tmp/beta.txt", file1, file2),
 				"--", "sh -c 'cat /tmp/alpha.txt && echo --- && cat /tmp/beta.txt'")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(output).To(ContainSubstring("alpha-content"))
@@ -213,11 +225,13 @@ var _ = Describe("Copy Flag", func() {
 			}
 			Expect(os.WriteFile(filePath, data, 0644)).To(Succeed())
 
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--copy", fmt.Sprintf("%s:/tmp/large.bin", filePath),
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--copy", fmt.Sprintf("%s:/tmp/large.bin", filePath),
 				"--", "sh -c 'wc -c < /tmp/large.bin'")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(strings.TrimSpace(output)).To(ContainSubstring("1048676"))

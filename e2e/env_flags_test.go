@@ -30,45 +30,53 @@ var _ = Describe("Environment Variable Flags", func() {
 
 	Context("--env flag", func() {
 		It("should inject a single environment variable into the pod", func() {
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--env", "MY_VAR=hello_world",
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--env", "MY_VAR=hello_world",
 				"--", "sh -c 'echo $MY_VAR'")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(strings.TrimSpace(output)).To(ContainSubstring("hello_world"))
 		})
 
 		It("should inject multiple environment variables", func() {
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--env", "FOO=bar",
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--env", "FOO=bar",
 				"--env", "BAZ=qux",
 				"--", "sh -c 'echo ${FOO}-${BAZ}'")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(strings.TrimSpace(output)).To(ContainSubstring("bar-qux"))
 		})
 
 		It("should handle environment variable with special characters in value", func() {
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--env", "SPECIAL=hello world & more",
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--env", "SPECIAL=hello world & more",
 				"--", "sh -c 'echo \"$SPECIAL\"'")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(strings.TrimSpace(output)).To(ContainSubstring("hello world & more"))
 		})
 
 		It("should handle environment variable with empty value", func() {
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--env", "EMPTY_VAR=",
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--env", "EMPTY_VAR=",
 				"--", "sh -c 'echo \"empty=${EMPTY_VAR}end\"'")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(strings.TrimSpace(output)).To(ContainSubstring("empty=end"))
@@ -82,11 +90,13 @@ var _ = Describe("Environment Variable Flags", func() {
 			_ = os.Setenv("HIP_TEST_SUBST", testValue)
 			defer func() { _ = os.Unsetenv("HIP_TEST_SUBST") }()
 
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--subst-env", "HIP_TEST_SUBST",
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--subst-env", "HIP_TEST_SUBST",
 				"--", "sh -c 'echo $HIP_TEST_SUBST'")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(strings.TrimSpace(output)).To(ContainSubstring(testValue))
@@ -100,12 +110,14 @@ var _ = Describe("Environment Variable Flags", func() {
 				_ = os.Unsetenv("HIP_VAR_B")
 			}()
 
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--subst-env", "HIP_VAR_A",
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--subst-env", "HIP_VAR_A",
 				"--subst-env", "HIP_VAR_B",
 				"--", "sh -c 'echo ${HIP_VAR_A}-${HIP_VAR_B}'")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(strings.TrimSpace(output)).To(ContainSubstring("alpha-beta"))
@@ -114,11 +126,13 @@ var _ = Describe("Environment Variable Flags", func() {
 		It("should handle unset host variable as empty", func() {
 			_ = os.Unsetenv("HIP_NONEXISTENT_VAR")
 
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--subst-env", "HIP_NONEXISTENT_VAR",
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--subst-env", "HIP_NONEXISTENT_VAR",
 				"--", "sh -c 'echo \"val=${HIP_NONEXISTENT_VAR}end\"'")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(strings.TrimSpace(output)).To(ContainSubstring("val=end"))
@@ -130,12 +144,14 @@ var _ = Describe("Environment Variable Flags", func() {
 			_ = os.Setenv("HIP_HOST_VAR", "from-host")
 			defer func() { _ = os.Unsetenv("HIP_HOST_VAR") }()
 
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--env", "EXPLICIT=from-flag",
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--env", "EXPLICIT=from-flag",
 				"--subst-env", "HIP_HOST_VAR",
 				"--", "sh -c 'echo ${EXPLICIT}-${HIP_HOST_VAR}'")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(strings.TrimSpace(output)).To(ContainSubstring("from-flag-from-host"))

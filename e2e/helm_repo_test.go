@@ -35,22 +35,25 @@ var _ = Describe("Helm Repository Sync", func() {
 		})
 
 		It("should copy helm repositories from host to pod", func() {
-			// Use exec.Command directly to control flags precisely
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo",
-				"--", "helm", "repo", "list")
+				"--copy-repo"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--", "helm", "repo", "list")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "Expected successful repo list, output: %s", output)
 			Expect(output).To(ContainSubstring("grafana"), "Expected grafana repo to be copied")
 		})
 
 		It("should update helm repositories when --update-repo is specified", func() {
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
 				"--copy-repo",
-				"--update-repo", "grafana",
-				"--", "helm", "search", "repo", "grafana/grafana", "--versions", "--max-col-width", "0")
+				"--update-repo", "grafana"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--", "helm", "search", "repo", "grafana/grafana", "--versions", "--max-col-width", "0")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "Expected successful search, output: %s", output)
 			Expect(output).To(ContainSubstring("grafana/grafana"), "Expected to find grafana chart after repo update")
@@ -59,47 +62,56 @@ var _ = Describe("Helm Repository Sync", func() {
 		It("should be able to install chart from repository", func() {
 			releaseName := generateReleaseName("repo-test")
 
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
 				"--copy-repo",
-				"--update-repo", "grafana",
-				"--", "helm", "install", releaseName, "grafana/grafana",
+				"--update-repo", "grafana"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--", "helm", "install", releaseName, "grafana/grafana",
 				"-n", testNS,
 				"--version", "8.0.0",
 				"--set", "replicas=1",
 				"--wait", "--timeout=2m")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "Expected successful install from repo, output: %s", output)
 			Expect(output).To(ContainSubstring("STATUS: deployed"))
 
 			By("cleaning up release")
-			cmd = exec.Command("helm", "in-pod", "exec",
+			cleanupArgs := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--", "helm", "uninstall", releaseName, "-n", testNS)
+				"--copy-repo=false"}
+			cleanupArgs = append(cleanupArgs, e2eResourceFlags...)
+			cleanupArgs = append(cleanupArgs, "--", "helm", "uninstall", releaseName, "-n", testNS)
+			cmd = exec.Command("helm", cleanupArgs...)
 			_, _ = Run(cmd)
 		})
 	})
 
 	Context("when --copy-repo is disabled", func() {
 		It("should not have access to host helm repositories", func() {
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--", "helm", "repo", "list")
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--", "helm", "repo", "list")
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
-			// Should succeed but return empty list
-			Expect(exitCode).To(Equal(0), "Expected successful repo list, output: %s", output)
+			// helm repo list returns exit code 1 when no repos exist ("no repositories to show"),
+			// so we accept both 0 and 1 as valid outcomes here.
+			Expect(exitCode).To(BeNumerically("<=", 1), "Expected repo list to run, output: %s", output)
 			Expect(output).NotTo(ContainSubstring("grafana"), "Should not have grafana repo when copy-repo is false")
 		})
 
 		It("should fail to install chart from repository", func() {
 			releaseName := generateReleaseName("repo-fail-test")
 
-			cmd := exec.Command("helm", "in-pod", "exec",
+			args := []string{"in-pod", "exec",
 				"--labels", testLabel,
-				"--copy-repo=false",
-				"--", "helm", "install", releaseName, "grafana/grafana", "-n", testNS)
+				"--copy-repo=false"}
+			args = append(args, e2eResourceFlags...)
+			args = append(args, "--", "helm", "install", releaseName, "grafana/grafana", "-n", testNS)
+			cmd := exec.Command("helm", args...)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).NotTo(Equal(0), "Expected install to fail without repo, output: %s", output)
 			Expect(strings.ToLower(output)).To(Or(
