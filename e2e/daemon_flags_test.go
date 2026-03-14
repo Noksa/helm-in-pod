@@ -43,20 +43,12 @@ var _ = Describe("Daemon Flags", func() {
 
 		It("should fail when starting a daemon that already exists without --force", func() {
 			By("starting daemon first time")
-			cmd := exec.Command("helm", "in-pod", "daemon", "start",
-				"--name", daemonName,
-				"--labels", testLabel,
-				"--copy-repo=false",
-				"-n", testNS)
+			cmd := BuildDaemonStartCommand("--name", daemonName, "--labels", testLabel, "-n", testNS)
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "First start should succeed: %s", output)
 
 			By("attempting to start same daemon again without --force")
-			cmd = exec.Command("helm", "in-pod", "daemon", "start",
-				"--name", daemonName,
-				"--labels", testLabel,
-				"--copy-repo=false",
-				"-n", testNS)
+			cmd = BuildDaemonStartCommand("--name", daemonName, "--labels", testLabel, "-n", testNS)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).NotTo(Equal(0), "Should fail without --force, output: %s", output)
 			Expect(output).To(ContainSubstring("already exists"))
@@ -64,11 +56,7 @@ var _ = Describe("Daemon Flags", func() {
 
 		It("should recreate daemon when --force is specified", func() {
 			By("starting daemon first time")
-			cmd := exec.Command("helm", "in-pod", "daemon", "start",
-				"--name", daemonName,
-				"--labels", testLabel,
-				"--copy-repo=false",
-				"-n", testNS)
+			cmd := BuildDaemonStartCommand("--name", daemonName, "--labels", testLabel, "-n", testNS)
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "First start should succeed: %s", output)
 
@@ -82,12 +70,7 @@ var _ = Describe("Daemon Flags", func() {
 			Expect(firstUID).NotTo(BeEmpty())
 
 			By("force-recreating daemon")
-			cmd = exec.Command("helm", "in-pod", "daemon", "start",
-				"--name", daemonName,
-				"--labels", testLabel,
-				"--copy-repo=false",
-				"--force",
-				"-n", testNS)
+			cmd = BuildDaemonStartCommand("--name", daemonName, "--labels", testLabel, "--force", "-n", testNS)
 			output, err = Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Force start should succeed: %s", output)
 
@@ -116,11 +99,7 @@ var _ = Describe("Daemon Flags", func() {
 			daemonName := fmt.Sprintf("stop-twice-%s", randomString(6))
 
 			By("starting daemon")
-			cmd := exec.Command("helm", "in-pod", "daemon", "start",
-				"--name", daemonName,
-				"--labels", testLabel,
-				"--copy-repo=false",
-				"-n", testNS)
+			cmd := BuildDaemonStartCommand("--name", daemonName, "--labels", testLabel, "-n", testNS)
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Start should succeed: %s", output)
 
@@ -150,11 +129,7 @@ var _ = Describe("Daemon Flags", func() {
 
 		It("should use HELM_IN_POD_DAEMON_NAME env var when --name is not specified", func() {
 			By("starting daemon with --name flag")
-			cmd := exec.Command("helm", "in-pod", "daemon", "start",
-				"--name", daemonName,
-				"--labels", testLabel,
-				"--copy-repo=false",
-				"-n", testNS)
+			cmd := BuildDaemonStartCommand("--name", daemonName, "--labels", testLabel, "-n", testNS)
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Start should succeed: %s", output)
 
@@ -181,11 +156,7 @@ var _ = Describe("Daemon Flags", func() {
 			_, _ = Run(cmd)
 
 			daemonName = fmt.Sprintf("update-repos-%s", randomString(6))
-			cmd = exec.Command("helm", "in-pod", "daemon", "start",
-				"--name", daemonName,
-				"--labels", testLabel,
-				"--copy-repo",
-				"-n", testNS)
+			cmd = BuildDaemonStartCommand("--name", daemonName, "--labels", testLabel, "--copy-repo", "-n", testNS)
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to start daemon: %s", output)
 		})

@@ -46,9 +46,21 @@ func RunWithExitCode(cmd *exec.Cmd) (string, int) {
 	return string(output), exitCode
 }
 
+// e2eResourceFlags are low resource flags used in all e2e pod commands to avoid
+// scheduling failures on constrained CI runners (single-node kind clusters).
+var e2eResourceFlags = []string{"--cpu-request=50m", "--cpu-limit=0", "--memory-request=64Mi", "--memory-limit=0"}
+
+// BuildDaemonStartCommand builds a helm in-pod daemon start command with common e2e flags.
+func BuildDaemonStartCommand(args ...string) *exec.Cmd {
+	finalArgs := []string{"in-pod", "daemon", "start", "--copy-repo=false"}
+	finalArgs = append(finalArgs, e2eResourceFlags...)
+	finalArgs = append(finalArgs, args...)
+	return exec.Command("helm", finalArgs...)
+}
+
 // BuildHelmInPodCommand builds a helm in-pod exec command with common flags for e2e tests
-// It automatically adds --copy-repo=false to avoid redundant network calls in parallel tests
-// since e2e tests use locally created charts and don't need helm repository access
+// It automatically adds --copy-repo=false and low resource requests to avoid scheduling
+// failures on constrained CI runners.
 //
 // IMPORTANT: All arguments after "--" are joined into a single command string to ensure
 // flags like "-n namespace" are passed to helm inside the pod, not consumed by the plugin.
@@ -63,8 +75,9 @@ func BuildHelmInPodCommand(args ...string) *exec.Cmd {
 	}
 
 	if separatorIndex == -1 {
-		// No separator found, just add --copy-repo=false
+		// No separator found, just add common flags
 		finalArgs := []string{"in-pod", "exec", "--copy-repo=false"}
+		finalArgs = append(finalArgs, e2eResourceFlags...)
 		finalArgs = append(finalArgs, args...)
 		return exec.Command("helm", finalArgs...)
 	}
@@ -73,12 +86,12 @@ func BuildHelmInPodCommand(args ...string) *exec.Cmd {
 	pluginArgs := args[:separatorIndex]
 	commandArgs := args[separatorIndex+1:]
 
-	// Build final args: helm in-pod exec --copy-repo=false <plugin-flags> -- "<command>"
+	// Build final args: helm in-pod exec --copy-repo=false <resource-flags> <plugin-flags> -- "<command>"
 	finalArgs := []string{"in-pod", "exec", "--copy-repo=false"}
+	finalArgs = append(finalArgs, e2eResourceFlags...)
 	finalArgs = append(finalArgs, pluginArgs...)
 	finalArgs = append(finalArgs, "--")
 
-	// Join command args into a single string
 	commandStr := strings.Join(commandArgs, " ")
 	finalArgs = append(finalArgs, commandStr)
 

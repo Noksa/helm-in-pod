@@ -120,11 +120,7 @@ var _ = Describe("Helm Repository Sync", func() {
 			daemonName = fmt.Sprintf("repo-daemon-%s", randomString(6))
 
 			By(fmt.Sprintf("starting daemon %s with --copy-repo", daemonName))
-			cmd = exec.Command("helm", "in-pod", "daemon", "start",
-				"--name", daemonName,
-				"--labels", testLabel,
-				"--copy-repo",
-				"-n", testNS)
+			cmd = BuildDaemonStartCommand("--name", daemonName, "--labels", testLabel, "--copy-repo", "-n", testNS)
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to start daemon: %s", output)
 		})
@@ -167,11 +163,7 @@ var _ = Describe("Helm Repository Sync", func() {
 			daemonName = fmt.Sprintf("repo-daemon-%s", randomString(6))
 
 			By(fmt.Sprintf("starting daemon %s with --copy-repo=false", daemonName))
-			cmd = exec.Command("helm", "in-pod", "daemon", "start",
-				"--name", daemonName,
-				"--labels", testLabel,
-				"--copy-repo=false",
-				"-n", testNS)
+			cmd = BuildDaemonStartCommand("--name", daemonName, "--labels", testLabel, "--copy-repo=false", "-n", testNS)
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to start daemon: %s", output)
 		})

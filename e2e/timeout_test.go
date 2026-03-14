@@ -65,11 +65,7 @@ var _ = Describe("Timeout Flag", func() {
 
 		BeforeEach(func() {
 			daemonName = fmt.Sprintf("timeout-daemon-%s", randomString(6))
-			cmd := exec.Command("helm", "in-pod", "daemon", "start",
-				"--name", daemonName,
-				"--labels", testLabel,
-				"--copy-repo=false",
-				"-n", testNS)
+			cmd := BuildDaemonStartCommand("--name", daemonName, "--labels", testLabel, "-n", testNS)
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to start daemon: %s", output)
 		})

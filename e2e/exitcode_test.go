@@ -112,11 +112,7 @@ exit 5
 			daemonName = fmt.Sprintf("test-daemon-%s", randomString(6))
 
 			By(fmt.Sprintf("starting daemon %s without --copy-repo", daemonName))
-			cmd := exec.Command("helm", "in-pod", "daemon", "start",
-				"--name", daemonName,
-				"--labels", testLabel,
-				"--copy-repo=false",
-				"-n", testNS)
+			cmd := BuildDaemonStartCommand("--name", daemonName, "--labels", testLabel, "-n", testNS)
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to start daemon: %s", output)
 

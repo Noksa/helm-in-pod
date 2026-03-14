@@ -33,7 +33,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 		BeforeEach(func() {
 			// Create one shared daemon for tests in this context
 			sharedDaemonName = fmt.Sprintf("pdb-shared-%s", randomString(6))
-			cmd := exec.Command("helm", "in-pod", "daemon", "start", "--name", sharedDaemonName, "--copy-repo=false")
+			cmd := BuildDaemonStartCommand("--name", sharedDaemonName)
 			_, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -155,11 +155,11 @@ var _ = Describe("PodDisruptionBudget", func() {
 			daemon2 := fmt.Sprintf("pdb-unique2-%s", randomString(6))
 
 			// Start two daemon pods
-			cmd := exec.Command("helm", "in-pod", "daemon", "start", "--name", daemon1, "--copy-repo=false")
+			cmd := BuildDaemonStartCommand("--name", daemon1)
 			_, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			cmd = exec.Command("helm", "in-pod", "daemon", "start", "--name", daemon2, "--copy-repo=false")
+			cmd = BuildDaemonStartCommand("--name", daemon2)
 			_, err = Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -205,7 +205,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 		BeforeEach(func() {
 			// Create daemon for this context
 			sharedDaemonName = fmt.Sprintf("pdb-protect-%s", randomString(6))
-			cmd := exec.Command("helm", "in-pod", "daemon", "start", "--name", sharedDaemonName, "--copy-repo=false")
+			cmd := BuildDaemonStartCommand("--name", sharedDaemonName)
 			_, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -254,7 +254,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 			daemonName := fmt.Sprintf("pdb-recreate-%s", randomString(6))
 
 			// Create first daemon
-			cmd := exec.Command("helm", "in-pod", "daemon", "start", "--name", daemonName, "--copy-repo=false")
+			cmd := BuildDaemonStartCommand("--name", daemonName)
 			_, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -270,7 +270,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Recreate with --force
-			cmd = exec.Command("helm", "in-pod", "daemon", "start", "--name", daemonName, "--copy-repo=false")
+			cmd = BuildDaemonStartCommand("--name", daemonName)
 			_, err = Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -383,7 +383,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 	Context("--create-pdb flag", func() {
 		It("should not create PDB for daemon when --create-pdb=false is specified", func() {
 			daemonName := fmt.Sprintf("pdb-disabled-%s", randomString(6))
-			cmd := exec.Command("helm", "in-pod", "daemon", "start", "--name", daemonName, "--create-pdb=false", "--copy-repo=false")
+			cmd := BuildDaemonStartCommand("--name", daemonName, "--create-pdb=false")
 			_, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -416,7 +416,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 		It("should create PDB for daemon by default (when flag not specified)", func() {
 			daemonName := fmt.Sprintf("pdb-default-%s", randomString(6))
 			// Don't specify --create-pdb flag, should default to true
-			cmd := exec.Command("helm", "in-pod", "daemon", "start", "--name", daemonName, "--copy-repo=false")
+			cmd := BuildDaemonStartCommand("--name", daemonName)
 			_, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
