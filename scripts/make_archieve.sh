@@ -12,6 +12,11 @@ cd "${PROJECT_DIR}/generated"
 version="$(grep "version" "${PROJECT_DIR}/plugin.yaml" | cut -d '"' -f 2)"
 cyber_log "Version: ${CYBER_G}${version}${CYBER_X}"
 
+TAR="tar"
+if command -v gtar &>/dev/null; then
+  TAR="gtar"
+fi
+
 ARCH="amd64 arm64"
 OS="linux darwin windows"
 
@@ -26,7 +31,7 @@ for A in $ARCH; do
     CGO_ENABLED=0 GOARCH=$A GOOS=$O go build -o "${output}" "${PROJECT_DIR}/main.go"
     
     archive="helm-in-pod_${version}_${O}_${A}.tar.gz"
-    gtar -czf "${archive}" "${output}"
+    $TAR -czf "${archive}" "${output}"
     rm -rf "${output}"
     
     cyber_ok "Created ${CYBER_G}${archive}${CYBER_X}"
