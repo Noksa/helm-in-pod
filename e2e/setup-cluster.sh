@@ -54,7 +54,3 @@ cyber_log "Cluster information:"
 KUBECONFIG="${E2E_KUBECONFIG}" kubectl cluster-info
 
 cyber_ok "E2E cluster setup complete"
-echo ""
-echo "To use this cluster manually:"
-echo "  ${CYBER_C}export KUBECONFIG=${E2E_KUBECONFIG}${CYBER_X}"
-echo "  ${CYBER_C}kubectl get nodes${CYBER_X}"
