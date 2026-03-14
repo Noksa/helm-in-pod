@@ -9,11 +9,51 @@ on:
       - main
 
 jobs:
-  test:
-    name: Tests
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          install-only: true
+
+      - name: Install goimports
+        run: go install golang.org/x/tools/cmd/goimports@latest
+
+      - name: Run lint
+        run: make lint
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Run unit tests
+        run: make test
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
         uses: actions/checkout@v6
 
       - name: Set up Go
@@ -27,10 +67,8 @@ jobs:
         with:
           install_only: true
 
-      - name: Install kind cluster
+      - name: Setup kind cluster
         run: make test-e2e-setup
 
-      - name: Run unit tests
-        run: |-
-          export KUBECONFIG="${GITHUB_WORKSPACE}/e2e/.kubeconfig"
-          make test
+      - name: Run e2e tests
+        run: make test-e2e-serial

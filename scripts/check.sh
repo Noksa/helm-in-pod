@@ -10,6 +10,11 @@ if ! command -v goimports &>/dev/null; then
     go install golang.org/x/tools/cmd/goimports@latest
 fi
 
+if ! command -v golangci-lint &>/dev/null; then
+    cyber_log "Installing golangci-lint..."
+    go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+fi
+
 cyber_log "Running go mod tidy"
 go mod tidy
 

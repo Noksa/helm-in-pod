@@ -15,11 +15,11 @@ import (
 const Name = "helm-in-pod"
 
 type Manager struct {
-	clientSet *kubernetes.Clientset
+	clientSet kubernetes.Interface
 	ctx       context.Context
 }
 
-func NewManager(clientSet *kubernetes.Clientset, ctx context.Context) *Manager {
+func NewManager(clientSet kubernetes.Interface, ctx context.Context) *Manager {
 	return &Manager{
 		clientSet: clientSet,
 		ctx:       ctx,

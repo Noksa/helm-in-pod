@@ -56,17 +56,17 @@ func newDaemonStartCmd() *cobra.Command {
 				}
 			}
 
-			err = internal.Namespace.PrepareNs()
+			err = internal.Namespace().PrepareNs()
 			if err != nil {
 				return err
 			}
 
-			pod, err := internal.Pod.CreateDaemonPod(opts)
+			pod, err := internal.Pod().CreateDaemonPod(opts)
 			if err != nil {
 				return err
 			}
 
-			userInfo, err := internal.Pod.GetPodUserInfo(pod)
+			userInfo, err := internal.Pod().GetPodUserInfo(pod)
 			if err != nil {
 				return err
 			}
@@ -86,13 +86,13 @@ func newDaemonStartCmd() *cobra.Command {
 			}
 
 			if opts.CopyRepo && helmFound {
-				err = internal.Pod.SyncHelmRepositories(pod, opts.ExecOptions, userInfo.HomeDirectory, isHelm4)
+				err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, userInfo.HomeDirectory, isHelm4)
 				if err != nil {
 					return err
 				}
 			}
 
-			err = internal.Pod.CopyUserFiles(pod, opts.ExecOptions, expand, nil)
+			err = internal.Pod().CopyUserFiles(pod, opts.ExecOptions, expand, nil)
 			if err != nil {
 				return err
 			}
@@ -105,7 +105,7 @@ func newDaemonStartCmd() *cobra.Command {
 			if helmFound {
 				annotations[hipconsts.AnnotationHelm4] = fmt.Sprintf("%v", isHelm4)
 			}
-			err = internal.Pod.AnnotatePod(pod, annotations)
+			err = internal.Pod().AnnotatePod(pod, annotations)
 			if err != nil {
 				return err
 			}

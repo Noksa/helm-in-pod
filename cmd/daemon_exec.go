@@ -30,7 +30,7 @@ func newDaemonExecCmd() *cobra.Command {
 				return fmt.Errorf("specify command to run")
 			}
 			log.Debugf("%s Looking for %s daemon", logz.LogHost(), color.CyanString(opts.Name))
-			pod, err := internal.Pod.GetDaemonPod(opts.Name)
+			pod, err := internal.Pod().GetDaemonPod(opts.Name)
 			if err != nil {
 				return err
 			}
@@ -53,19 +53,19 @@ func newDaemonExecCmd() *cobra.Command {
 				}
 
 				if opts.CopyRepo {
-					err = internal.Pod.SyncHelmRepositories(pod, opts.ExecOptions, homeDirectory, isHelm4)
+					err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, homeDirectory, isHelm4)
 					if err != nil {
 						return err
 					}
 				} else if opts.UpdateAllRepos {
 					// Update all repos without copying
 					opts.UpdateRepo = []string{}
-					err = internal.Pod.UpdateHelmRepositories(pod, opts.ExecOptions, isHelm4)
+					err = internal.Pod().UpdateHelmRepositories(pod, opts.ExecOptions, isHelm4)
 					if err != nil {
 						return err
 					}
 				} else if len(opts.UpdateRepo) > 0 {
-					err = internal.Pod.UpdateHelmRepositories(pod, opts.ExecOptions, isHelm4)
+					err = internal.Pod().UpdateHelmRepositories(pod, opts.ExecOptions, isHelm4)
 					if err != nil {
 						return err
 					}
@@ -81,7 +81,7 @@ func newDaemonExecCmd() *cobra.Command {
 						opts.FilesAsMap[splitted[0]] = splitted[1]
 					}
 				}
-				err = internal.Pod.CopyUserFiles(pod, opts.ExecOptions, expand, opts.Clean)
+				err = internal.Pod().CopyUserFiles(pod, opts.ExecOptions, expand, opts.Clean)
 				if err != nil {
 					return err
 				}
@@ -92,7 +92,7 @@ func newDaemonExecCmd() *cobra.Command {
 			if timeout == 0 {
 				timeout = time.Hour * 2
 			}
-			return internal.Pod.ExecuteCommandInDaemon(cmd.Context(), pod, cmdToUse, homeDirectory, timeout, opts.ExecOptions)
+			return internal.Pod().ExecuteCommandInDaemon(cmd.Context(), pod, cmdToUse, homeDirectory, timeout, opts.ExecOptions)
 		},
 	}
 	execCmd.Flags().StringVar(&opts.Name, "name", "", "Daemon name (required)")

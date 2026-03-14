@@ -34,13 +34,13 @@ import (
 const Namespace = "helm-in-pod"
 
 type Manager struct {
-	clientSet   *kubernetes.Clientset
+	clientSet   kubernetes.Interface
 	ctx         context.Context
 	myHostname  string
 	interrupted bool
 }
 
-func NewManager(clientSet *kubernetes.Clientset, ctx context.Context, hostname string) *Manager {
+func NewManager(clientSet kubernetes.Interface, ctx context.Context, hostname string) *Manager {
 	return &Manager{
 		clientSet:  clientSet,
 		ctx:        ctx,
