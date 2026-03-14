@@ -3,7 +3,7 @@ module github.com/noksa/helm-in-pod
 go 1.26
 
 require (
-	github.com/Noksa/operator-home v0.18.5-0.20260314094532-d41d06fe5dea
+	github.com/Noksa/operator-home v0.18.5-0.20260314135044-3d5e5c2a5c3f
 	github.com/fatih/color v1.18.0
 	github.com/google/uuid v1.6.0
 	github.com/noksa/go-helpers v0.0.0-20221015170552-c776d64423ef
@@ -18,7 +18,7 @@ require (
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
-	sigs.k8s.io/controller-runtime v0.23.1
+	sigs.k8s.io/controller-runtime v0.23.3
 )
 
 require (

@@ -25,7 +25,6 @@ import (
 	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,18 +33,20 @@ import (
 const Namespace = "helm-in-pod"
 
 type Manager struct {
-	clientSet   kubernetes.Interface
 	ctx         context.Context
 	myHostname  string
 	interrupted bool
 }
 
-func NewManager(clientSet kubernetes.Interface, ctx context.Context, hostname string) *Manager {
+func NewManager(ctx context.Context, hostname string) *Manager {
 	return &Manager{
-		clientSet:  clientSet,
 		ctx:        ctx,
 		myHostname: hostname,
 	}
+}
+
+func (m *Manager) client() *operatorkclient.Client {
+	return operatorkclient.DefaultClient()
 }
 
 func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOptions cmdoptions.PurgeOptions) error {
@@ -59,7 +60,7 @@ func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOption
 		selector = strings.TrimPrefix(selector, ",")
 		opts.LabelSelector = selector
 	}
-	pods, err := m.clientSet.CoreV1().Pods(Namespace).List(context.Background(), opts)
+	pods, err := m.client().ClientSet().CoreV1().Pods(Namespace).List(context.Background(), opts)
 	if err != nil {
 		return err
 	}
@@ -73,7 +74,7 @@ func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOption
 			}
 		}
 
-		err = m.clientSet.CoreV1().Pods(Namespace).Delete(context.Background(), pod.Name, metav1.DeleteOptions{})
+		err = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(context.Background(), pod.Name, metav1.DeleteOptions{})
 		if err != nil {
 			return err
 		}
@@ -105,7 +106,7 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	annotations := map[string]string{}
 	maps.Copy(annotations, opts.Annotations)
 
-	pod, err := m.clientSet.CoreV1().Pods(Namespace).Create(m.ctx, &corev1.Pod{
+	pod, err := m.client().ClientSet().CoreV1().Pods(Namespace).Create(m.ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("%v-", Namespace),
 			Labels:       labels,
@@ -121,7 +122,7 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	if opts.CreatePDB {
 		if err := m.CreatePodDisruptionBudget(m.ctx, operationID); err != nil {
 			// If PDB creation fails, clean up the pod
-			_ = m.clientSet.CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{})
+			_ = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{})
 			return nil, fmt.Errorf("failed to create PodDisruptionBudget: %w", err)
 		}
 	}
@@ -158,7 +159,7 @@ func (m *Manager) waitUntilPodIsRunning(pod *corev1.Pod) error {
 	start := time.Now()
 
 	for time.Since(start) <= timeout {
-		stdout, stderr, err := operatorkclient.RunCommandInPod("[ -f /tmp/ready ] && echo ready", Namespace, pod.Name, pod.Namespace, nil)
+		stdout, stderr, err := m.client().RunCommandInPod("[ -f /tmp/ready ] && echo ready", Namespace, pod.Name, pod.Namespace, nil)
 		if err == nil && strings.Contains(stdout, "ready") {
 			log.Debugf("%v %v pod is ready", logz.LogHost(), color.CyanString(pod.Name))
 			return nil
@@ -185,7 +186,7 @@ func (m *Manager) waitUntilPodIsDeleted(podName string) error {
 	start := time.Now()
 
 	for time.Since(start) <= timeout {
-		_, err := m.clientSet.CoreV1().Pods(Namespace).Get(m.ctx, podName, metav1.GetOptions{})
+		_, err := m.client().ClientSet().CoreV1().Pods(Namespace).Get(m.ctx, podName, metav1.GetOptions{})
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				log.Infof("%v Pod %v has been deleted", logz.LogHost(), color.CyanString(podName))
@@ -214,7 +215,7 @@ func (m *Manager) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string
 	}
 
 	dir := filepath.Dir(destPath)
-	req := m.clientSet.CoreV1().RESTClient().Post().
+	req := m.client().ClientSet().CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(pod.Name).
 		Namespace(pod.Namespace).
@@ -232,7 +233,7 @@ tar zxf - -C /`, dir)},
 	}, scheme.ParameterCodec)
 
 	return hipretry.Retry(attempts, func() error {
-		exec, err := remotecommand.NewSPDYExecutor(operatorkclient.GetClientConfig(), "POST", req.URL())
+		exec, err := remotecommand.NewSPDYExecutor(m.client().Config(), "POST", req.URL())
 		if err != nil {
 			return err
 		}
@@ -254,7 +255,7 @@ tar zxf - -C /`, dir)},
 }
 
 func (m *Manager) StreamLogsFromPod(ctx context.Context, pod *corev1.Pod, writer io.Writer, since time.Time) error {
-	req := m.clientSet.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{
+	req := m.client().ClientSet().CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{
 		Follow:    true,
 		SinceTime: &metav1.Time{Time: since},
 	})
@@ -279,7 +280,7 @@ func (m *Manager) StreamLogsFromPod(ctx context.Context, pod *corev1.Pod, writer
 }
 
 func (m *Manager) GetPodPhase(ctx context.Context, pod *corev1.Pod) (corev1.PodPhase, error) {
-	myPod, err := m.clientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
+	myPod, err := m.client().ClientSet().CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 	if err != nil {
 		return corev1.PodFailed, client.IgnoreNotFound(err)
 	}
@@ -317,7 +318,7 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 	annotations := map[string]string{}
 	maps.Copy(annotations, opts.Annotations)
 
-	pod, err := m.clientSet.CoreV1().Pods(Namespace).Create(m.ctx, &corev1.Pod{
+	pod, err := m.client().ClientSet().CoreV1().Pods(Namespace).Create(m.ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        fmt.Sprintf("daemon-%s", opts.Name),
 			Labels:      labels,
@@ -333,7 +334,7 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 	if opts.CreatePDB {
 		if err := m.CreatePodDisruptionBudget(m.ctx, operationID); err != nil {
 			// If PDB creation fails, clean up the pod
-			_ = m.clientSet.CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{})
+			_ = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{})
 			return nil, fmt.Errorf("failed to create PodDisruptionBudget: %w", err)
 		}
 	}
@@ -344,7 +345,7 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 
 func (m *Manager) GetDaemonPod(name string) (*corev1.Pod, error) {
 	podName := fmt.Sprintf("daemon-%s", name)
-	pod, err := m.clientSet.CoreV1().Pods(Namespace).Get(m.ctx, podName, metav1.GetOptions{})
+	pod, err := m.client().ClientSet().CoreV1().Pods(Namespace).Get(m.ctx, podName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("daemon pod '%s' not found: %w", name, err)
 	}
@@ -356,7 +357,7 @@ func (m *Manager) DeleteDaemonPod(name string) error {
 	log.Infof("%v Deleting daemon pod %v", logz.LogHost(), color.CyanString(podName))
 
 	// Get the pod to extract operation ID before deletion
-	pod, err := m.clientSet.CoreV1().Pods(Namespace).Get(m.ctx, podName, metav1.GetOptions{})
+	pod, err := m.client().ClientSet().CoreV1().Pods(Namespace).Get(m.ctx, podName, metav1.GetOptions{})
 	if err == nil {
 		// Extract operation ID from pod labels and delete associated PDB
 		if operationID, ok := pod.Labels[hipconsts.LabelOperationID]; ok {
@@ -366,7 +367,7 @@ func (m *Manager) DeleteDaemonPod(name string) error {
 		}
 	}
 
-	err = m.clientSet.CoreV1().Pods(Namespace).Delete(m.ctx, podName, metav1.DeleteOptions{})
+	err = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(m.ctx, podName, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
@@ -377,7 +378,7 @@ func (m *Manager) DeleteDaemonPod(name string) error {
 func (m *Manager) AnnotatePod(pod *corev1.Pod, annotations map[string]string) error {
 	return hipretry.Retry(3, func() error {
 		// Get latest pod state before each attempt
-		latestPod, err := m.clientSet.CoreV1().Pods(pod.Namespace).Get(m.ctx, pod.Name, metav1.GetOptions{})
+		latestPod, err := m.client().ClientSet().CoreV1().Pods(pod.Namespace).Get(m.ctx, pod.Name, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
@@ -387,7 +388,7 @@ func (m *Manager) AnnotatePod(pod *corev1.Pod, annotations map[string]string) er
 		}
 		maps.Copy(latestPod.Annotations, annotations)
 
-		updatedPod, err := m.clientSet.CoreV1().Pods(latestPod.Namespace).Update(m.ctx, latestPod, metav1.UpdateOptions{})
+		updatedPod, err := m.client().ClientSet().CoreV1().Pods(latestPod.Namespace).Update(m.ctx, latestPod, metav1.UpdateOptions{})
 		if err != nil {
 			return err
 		}
@@ -399,7 +400,7 @@ func (m *Manager) AnnotatePod(pod *corev1.Pod, annotations map[string]string) er
 }
 
 func (m *Manager) OpenInteractiveShell(ctx context.Context, pod *corev1.Pod, shell string) error {
-	req := m.clientSet.CoreV1().RESTClient().Post().
+	req := m.client().ClientSet().CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(pod.Name).
 		Namespace(pod.Namespace).
@@ -414,7 +415,7 @@ func (m *Manager) OpenInteractiveShell(ctx context.Context, pod *corev1.Pod, she
 		TTY:       true,
 	}, scheme.ParameterCodec)
 
-	exec, err := remotecommand.NewSPDYExecutor(operatorkclient.GetClientConfig(), "POST", req.URL())
+	exec, err := remotecommand.NewSPDYExecutor(m.client().Config(), "POST", req.URL())
 	if err != nil {
 		return err
 	}

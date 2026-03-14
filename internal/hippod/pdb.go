@@ -38,7 +38,7 @@ func (m *Manager) CreatePodDisruptionBudget(ctx context.Context, operationID str
 		},
 	}
 
-	_, err := m.clientSet.PolicyV1().PodDisruptionBudgets(Namespace).Create(ctx, pdb, metav1.CreateOptions{})
+	_, err := m.client().ClientSet().PolicyV1().PodDisruptionBudgets(Namespace).Create(ctx, pdb, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create PodDisruptionBudget: %w", err)
 	}
@@ -51,7 +51,7 @@ func (m *Manager) CreatePodDisruptionBudget(ctx context.Context, operationID str
 func (m *Manager) DeletePodDisruptionBudgets(ctx context.Context, operationID string) error {
 	labelSelector := fmt.Sprintf("%s=%s", hipconsts.LabelOperationID, operationID)
 
-	err := m.clientSet.PolicyV1().PodDisruptionBudgets(Namespace).DeleteCollection(
+	err := m.client().ClientSet().PolicyV1().PodDisruptionBudgets(Namespace).DeleteCollection(
 		ctx,
 		metav1.DeleteOptions{},
 		metav1.ListOptions{

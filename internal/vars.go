@@ -7,7 +7,6 @@ import (
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/noksa/helm-in-pod/internal/hipns"
 	"github.com/noksa/helm-in-pod/internal/hippod"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -27,24 +26,22 @@ func buildConfigOverrides() *clientcmd.ConfigOverrides {
 }
 
 func InitManagers() {
-	operatorkclient.SetConfigProvider(func() *rest.Config {
-		kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-			clientcmd.NewDefaultClientConfigLoadingRules(),
-			buildConfigOverrides(),
-		)
-		config, err := kubeConfig.ClientConfig()
-		if err != nil {
-			panic(err)
-		}
-		return config
-	})
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		clientcmd.NewDefaultClientConfigLoadingRules(),
+		buildConfigOverrides(),
+	)
+	config, err := kubeConfig.ClientConfig()
+	if err != nil {
+		panic(err)
+	}
 
-	clientSet := operatorkclient.GetClientSet()
+	operatorkclient.SetDefaultConfig(config)
+
 	hostname, _ := os.Hostname()
 	ctx := context.Background()
 
-	namespace = hipns.NewManager(clientSet, ctx)
-	pod = hippod.NewManager(clientSet, ctx, hostname)
+	namespace = hipns.NewManager(ctx)
+	pod = hippod.NewManager(ctx, hostname)
 }
 
 func Namespace() *hipns.Manager {
