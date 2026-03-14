@@ -69,8 +69,8 @@ install: ## Uninstall and install specific version (use VERSION=xxx, e.g., VERSI
 $(GINKGO_BIN):
 	@go install github.com/onsi/ginkgo/v2/ginkgo@latest
 
-.PHONY: test
-test: $(GINKGO_BIN) ## Run unit tests with Ginkgo
+.PHONY: test-unit
+test-unit: $(GINKGO_BIN) ## Run unit tests with Ginkgo
 	@$(GINKGO_BIN) -r --silence-skips --skip-package=e2e
 
 .PHONY: test-verbose
@@ -127,7 +127,7 @@ k9s: ## Run k9s with e2e cluster kubeconfig
 	@KUBECONFIG=e2e/.kubeconfig k9s
 
 .PHONY: test-all
-test-all: test test-e2e ## Run all tests (unit + e2e)
+test-all: test-unit test-e2e ## Run all tests (unit + e2e)
 
 ##@ Build
 

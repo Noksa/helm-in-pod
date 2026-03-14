@@ -155,6 +155,42 @@ var _ = Describe("buildPodSpec", func() {
 			Expect(spec.Resources).To(BeNil())
 		})
 
+		It("should set request but skip limit when limit is '0'", func() {
+			opts := baseOpts()
+			opts.CpuRequest = "50m"
+			opts.CpuLimit = "0"
+			opts.MemoryRequest = "64Mi"
+			opts.MemoryLimit = "0"
+			spec, err := buildPodSpec(opts)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(spec.Resources).NotTo(BeNil())
+			Expect(spec.Resources.Requests.Cpu().String()).To(Equal("50m"))
+			_, hasCpuLimit := spec.Resources.Limits["cpu"]
+			Expect(hasCpuLimit).To(BeFalse(), "cpu limit should be absent when set to '0'")
+			Expect(spec.Resources.Requests.Memory().String()).To(Equal("64Mi"))
+			_, hasMemLimit := spec.Resources.Limits["memory"]
+			Expect(hasMemLimit).To(BeFalse(), "memory limit should be absent when set to '0'")
+		})
+
+		It("should set limit but skip request when request is '0'", func() {
+			opts := baseOpts()
+			opts.CpuRequest = "0"
+			opts.CpuLimit = "500m"
+			opts.MemoryRequest = "0"
+			opts.MemoryLimit = "256Mi"
+			spec, err := buildPodSpec(opts)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(spec.Resources).NotTo(BeNil())
+			_, hasCpuReq := spec.Resources.Requests["cpu"]
+			Expect(hasCpuReq).To(BeFalse(), "cpu request should be absent when set to '0'")
+			Expect(spec.Resources.Limits.Cpu().String()).To(Equal("500m"))
+			_, hasMemReq := spec.Resources.Requests["memory"]
+			Expect(hasMemReq).To(BeFalse(), "memory request should be absent when set to '0'")
+			Expect(spec.Resources.Limits.Memory().String()).To(Equal("256Mi"))
+		})
+
 		It("should parse various resource formats", func() {
 			opts := baseOpts()
 			opts.CpuRequest = "2"

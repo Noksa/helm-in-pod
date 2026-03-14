@@ -47,7 +47,7 @@ jobs:
           cache: true
 
       - name: Run unit tests
-        run: make test
+        run: make test-unit
 
   e2e-tests:
     name: E2E Tests
