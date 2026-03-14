@@ -11,8 +11,35 @@ CYBER_URL := https://raw.githubusercontent.com/Noksa/install-scripts/main/cyberp
 VERSION := $(shell grep 'version:' plugin.yaml | cut -d '"' -f 2)
 GO_VERSION := $(shell go version | cut -d ' ' -f 3)
 
-# Ginkgo
-GINKGO_BIN := $(shell go env GOPATH)/bin/ginkgo
+# Go binary paths
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
+else
+GOBIN=$(shell go env GOBIN)
+endif
+
+# Test configuration
+GINKGO         := $(GOBIN)/ginkgo
+GINKGO_PROCS   ?= 3
+GINKGO_FLAGS   ?= --silence-skips --procs=$(GINKGO_PROCS) --randomize-all
+E2E_TIMEOUT    ?= 10m
+
+# Test runner macros
+define run_tests
+	@if [ ! -f $(GINKGO) ]; then \
+		echo "-> installing ginkgo CLI..."; \
+		go install github.com/onsi/ginkgo/v2/ginkgo@latest; \
+	fi
+	@$(GINKGO) $(GINKGO_FLAGS) $(if $(2),--focus "$(2)",) $(1)
+endef
+
+define run_e2e
+	@if [ ! -f $(GINKGO) ]; then \
+		echo "-> installing ginkgo CLI..."; \
+		go install github.com/onsi/ginkgo/v2/ginkgo@latest; \
+	fi
+	@./e2e/run-tests.sh $(if $(1),--focus="$(1)",)
+endef
 
 $(CYBER_CACHE):
 	@curl -s $(CYBER_URL) > $(CYBER_CACHE)
@@ -66,26 +93,28 @@ install: ## Uninstall and install specific version (use VERSION=xxx, e.g., VERSI
 
 ##@ Testing
 
-$(GINKGO_BIN):
-	@go install github.com/onsi/ginkgo/v2/ginkgo@latest
-
 .PHONY: test-unit
-test-unit: $(GINKGO_BIN) ## Run unit tests with Ginkgo
-	@$(GINKGO_BIN) -r --silence-skips --skip-package=e2e
+test-unit: ## Run unit tests
+	$(call run_tests,--skip-package=e2e -r)
+
+.PHONY: test
+test: test-unit ## Run all unit tests (alias)
 
 .PHONY: test-verbose
-test-verbose: $(GINKGO_BIN) ## Run unit tests with verbose output
-	@$(GINKGO_BIN) -r -v --skip-package=e2e
+test-verbose: ## Run unit tests with verbose output
+	$(call run_tests,--skip-package=e2e -r -v)
 
 .PHONY: test-coverage
-test-coverage: $(GINKGO_BIN) $(CYBER_CACHE) ## Run tests with coverage
-	@$(GINKGO_BIN) -r --cover --coverprofile=coverage.out --skip-package=e2e
+test-coverage: $(CYBER_CACHE) ## Run tests with coverage
+	$(call run_tests,--skip-package=e2e -r --cover --coverprofile=coverage.out)
 	@go tool cover -html=coverage.out -o coverage.html
 	@source $(CYBER_CACHE) && cyber_ok "Coverage report: $${CYBER_G}coverage.html$${CYBER_X}"
 
 .PHONY: test-plugin
 test-plugin: ## Test plugin as Helm plugin (integration test)
 	@./scripts/test-plugin.sh
+
+##@ E2E Testing
 
 .PHONY: test-e2e-setup
 test-e2e-setup: $(CYBER_CACHE) ## Setup kind cluster for e2e tests
@@ -96,24 +125,12 @@ test-e2e-teardown: $(CYBER_CACHE) ## Teardown kind cluster for e2e tests
 	@./e2e/teardown-cluster.sh
 
 .PHONY: test-e2e
-test-e2e: $(GINKGO_BIN) $(CYBER_CACHE) ## Run e2e tests (use FOCUS="pattern" or GINKGO_ARGS="..." to filter tests)
-	@if [ -n "$(FOCUS)" ]; then \
-		./e2e/run-tests.sh --focus="$(FOCUS)" $(GINKGO_ARGS); \
-	else \
-		./e2e/run-tests.sh $(GINKGO_ARGS); \
-	fi
+test-e2e: ## Run e2e tests (use FOCUS="pattern" to filter)
+	$(call run_e2e,$(FOCUS))
 
 .PHONY: test-e2e-serial
-test-e2e-serial: $(GINKGO_BIN) $(CYBER_CACHE) ## Run e2e tests serially (use FOCUS="pattern" or GINKGO_ARGS="..." to filter)
-	@if [ -n "$(FOCUS)" ]; then \
-		./e2e/run-tests.sh --procs=1 --focus="$(FOCUS)" $(GINKGO_ARGS); \
-	else \
-		./e2e/run-tests.sh --procs=1 $(GINKGO_ARGS); \
-	fi
-
-.PHONY: test-e2e-focus
-test-e2e-focus: $(GINKGO_BIN) ## Alias for test-e2e with FOCUS (use FOCUS="pattern" or GINKGO_ARGS="...")
-	@./e2e/run-tests.sh --focus="$(FOCUS)" $(GINKGO_ARGS)
+test-e2e-serial: ## Run e2e tests serially (use FOCUS="pattern" to filter)
+	@GINKGO_PROCS=1 $(MAKE) test-e2e FOCUS="$(FOCUS)"
 
 .PHONY: test-e2e-full
 test-e2e-full: test-e2e-setup test-e2e test-e2e-teardown ## Full e2e flow: setup, test, teardown
@@ -148,4 +165,3 @@ clean: $(CYBER_CACHE) ## Clean build artifacts
 	@source $(CYBER_CACHE) && cyber_log "Cleaning up"
 	@rm -rf bin/ generated/ coverage.out coverage.html
 	@source $(CYBER_CACHE) && cyber_ok "Cleaned"
-
