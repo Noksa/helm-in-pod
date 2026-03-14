@@ -7,3 +7,5 @@ coverage.out
 coverage.html
 .cyber.sh
 .helm-plugin-dev/
+*.test
+*.coverprofile

@@ -13,8 +13,9 @@ import (
 // GetHelmMajorVersion returns the major version of Helm running in the specified pod
 // Returns 0 if version cannot be determined
 func GetHelmMajorVersion(podName, podNamespace, image string) (int, error) {
+	kclient := operatorkclient.DefaultClient()
 	var stdout string
-	_, stderr, err := operatorkclient.RunCommandInPod("helm --help", hipconsts.HelmInPodNamespace, podName, podNamespace, nil)
+	_, stderr, err := kclient.RunCommandInPod("helm --help", hipconsts.HelmInPodNamespace, podName, podNamespace, nil)
 	if err != nil {
 		if strings.Contains(stderr, "helm: not found") {
 			return 0, fmt.Errorf("helm is not installed in image %v", image)
@@ -22,7 +23,7 @@ func GetHelmMajorVersion(podName, podNamespace, image string) (int, error) {
 		return 0, fmt.Errorf("failed to get helm version: %v, stderr: %s", err, stderr)
 	}
 
-	stdout, stderr, err = operatorkclient.RunCommandInPod("helm version --template '{{ $.Version }}'", hipconsts.HelmInPodNamespace, podName, podNamespace, nil)
+	stdout, stderr, err = kclient.RunCommandInPod("helm version --template '{{ $.Version }}'", hipconsts.HelmInPodNamespace, podName, podNamespace, nil)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get helm version: %v, stderr: %s", err, stderr)
 	}

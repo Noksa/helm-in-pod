@@ -15,12 +15,14 @@ import (
 	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
+	"github.com/noksa/helm-in-pod/internal/hiperrors"
 	"github.com/noksa/helm-in-pod/internal/hipretry"
 	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
 	"go.uber.org/multierr"
 	"helm.sh/helm/v4/pkg/cli"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -37,7 +39,7 @@ func (m *Manager) GetPodUserInfo(pod *corev1.Pod) (*UserInfo, error) {
 		log.Debugf("%v Determining user home directory", logz.LogPod())
 		var stderr string
 		var err error
-		stdout, stderr, err = operatorkclient.RunCommandInPod(
+		stdout, stderr, err = m.client().RunCommandInPod(
 			`echo "${HOME}:::$(whoami):::$(id)"`,
 			Namespace, pod.Name, pod.Namespace, nil)
 		if err != nil {
@@ -86,7 +88,7 @@ func (m *Manager) SyncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOpti
 
 	err := hipretry.Retry(opts.CopyAttempts, func() error {
 		log.Debugf("%v Creating %v/.config/helm directory", logz.LogPod(), homeDirectory)
-		_, stderr, err := operatorkclient.RunCommandInPod(
+		_, stderr, err := m.client().RunCommandInPod(
 			`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null`,
 			Namespace, pod.Name, pod.Namespace, nil)
 		if err != nil {
@@ -128,7 +130,7 @@ func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 			if !isHelm4 {
 				cmdToUse = fmt.Sprintf("%v --fail-on-repo-update-fail", cmdToUse)
 			}
-			stdout, stderr, err := operatorkclient.RunCommandInPod(cmdToUse,
+			stdout, stderr, err := m.client().RunCommandInPod(cmdToUse,
 				Namespace, pod.Name, pod.Namespace, nil)
 			if err != nil {
 				return multierr.Append(err, fmt.Errorf("%v\n%v", stdout, stderr))
@@ -146,7 +148,7 @@ func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 			if !isHelm4 {
 				cmdToUse = fmt.Sprintf("%v --fail-on-repo-update-fail", cmdToUse)
 			}
-			stdout, stderr, err := operatorkclient.RunCommandInPod(cmdToUse,
+			stdout, stderr, err := m.client().RunCommandInPod(cmdToUse,
 				Namespace, pod.Name, pod.Namespace, nil)
 			if err != nil {
 				return multierr.Append(err, fmt.Errorf("%v\n%v", stdout, stderr))
@@ -166,7 +168,7 @@ func (m *Manager) CopyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions, ex
 	if len(cleanPaths) > 0 {
 		cmd := fmt.Sprintf("rm -rf %s", strings.Join(cleanPaths, " "))
 		log.Debugf("%v Cleaning up files: %v", logz.LogPod(), cmd)
-		stdOut, stdErr, err := operatorkclient.RunCommandInPod(cmd, Namespace, pod.Name, pod.Namespace, nil)
+		stdOut, stdErr, err := m.client().RunCommandInPod(cmd, Namespace, pod.Name, pod.Namespace, nil)
 		if err != nil {
 			return fmt.Errorf("%v\n%v\n%v", err, stdErr, stdOut)
 		}
@@ -188,7 +190,7 @@ func (m *Manager) CopyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions, ex
 func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command string, homeDirectory string, opts cmdoptions.ExecOptions) error {
 	scriptPath := fmt.Sprintf("%v/wrapped-script.sh", homeDirectory)
 
-	tempScriptFile, err := os.CreateTemp("", "helm-in-pod")
+	tempScriptFile, err := os.CreateTemp("", hipconsts.HelmInPodNamespace)
 	if err != nil {
 		return err
 	}
@@ -202,11 +204,15 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 		return err
 	}
 
-	_, err = tempScriptFile.WriteString("set -eu\n")
+	_, err = tempScriptFile.WriteString("#!/bin/sh\nset -eu\n")
 	if err != nil {
 		return err
 	}
 	_, err = tempScriptFile.WriteString(command)
+	if err != nil {
+		return err
+	}
+	_, err = tempScriptFile.WriteString("\n")
 	if err != nil {
 		return err
 	}
@@ -226,8 +232,8 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 		<-ctx.Done()
 		log.Warnf("%v Timed out!", logz.LogHost())
 		for {
-			_, _, err := operatorkclient.RunCommandInPod("kill -term 1",
-				"helm-in-pod", pod.Name, pod.Namespace, nil)
+			_, _, err := m.client().RunCommandInPod("kill -term 1",
+				hipconsts.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 			if err == nil {
 				return
 			}
@@ -266,7 +272,7 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, command string, homeDirectory string, timeout time.Duration, opts cmdoptions.ExecOptions) error {
 	scriptPath := fmt.Sprintf("%v/wrapped-script.sh", homeDirectory)
 
-	tempScriptFile, err := os.CreateTemp("", "helm-in-pod")
+	tempScriptFile, err := os.CreateTemp("", hipconsts.HelmInPodNamespace)
 	if err != nil {
 		return err
 	}
@@ -335,7 +341,13 @@ func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, c
 		Stderr:        os.Stderr,
 	}
 
-	_, _, err = operatorkclient.RunCommandInPodWithOptions(runOpts)
+	_, _, err = m.client().RunCommandInPodWithOptions(runOpts)
+	if err != nil {
+		if code := parseExitCodeFromError(err); code != hiperrors.ExitCodeUnknown {
+			log.Infof("%v Command exited with code %d", logz.LogPod(), code)
+			return &hiperrors.ExitCodeError{Code: int32(code)}
+		}
+	}
 	return err
 }
 
@@ -361,10 +373,67 @@ func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) err
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		// Extract the actual exit code from the container status
+		exitCode := m.getContainerExitCode(pod)
+		if exitCode != hiperrors.ExitCodeUnknown {
+			log.Infof("%v Command exited with code %d", logz.LogPod(), exitCode)
+			return &hiperrors.ExitCodeError{Code: exitCode}
+		}
 		return fmt.Errorf("pod failed")
 	}
 	if phase == corev1.PodSucceeded {
 		return nil
 	}
 	return fmt.Errorf("unexpected pod phase: %v", phase)
+}
+
+// getContainerExitCode retrieves the exit code from the pod's container status.
+// Returns ExitCodeUnknown if the exit code cannot be determined.
+func (m *Manager) getContainerExitCode(pod *corev1.Pod) int32 {
+	myPod, err := m.client().ClientSet().CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
+	if err != nil {
+		return hiperrors.ExitCodeUnknown
+	}
+	return exitCodeFromContainerStatuses(myPod.Status.ContainerStatuses)
+}
+
+// exitCodeFromContainerStatuses extracts the exit code from container statuses.
+// Returns ExitCodeUnknown if no terminated container is found.
+func exitCodeFromContainerStatuses(statuses []corev1.ContainerStatus) int32 {
+	for _, cs := range statuses {
+		if cs.State.Terminated != nil {
+			return cs.State.Terminated.ExitCode
+		}
+	}
+	return hiperrors.ExitCodeUnknown
+}
+
+// parseExitCodeFromError attempts to extract an exit code from an error message.
+// The Kubernetes remotecommand executor produces messages like
+// "command terminated with exit code N" which get wrapped by operatorkclient.
+// Returns ExitCodeUnknown if the exit code cannot be determined.
+func parseExitCodeFromError(err error) int {
+	if err == nil {
+		return hiperrors.ExitCodeUnknown
+	}
+	msg := err.Error()
+	const prefix = "exit code "
+	idx := strings.LastIndex(msg, prefix)
+	if idx < 0 {
+		return hiperrors.ExitCodeUnknown
+	}
+	codeStr := strings.TrimSpace(msg[idx+len(prefix):])
+	// Take only digits
+	end := 0
+	for end < len(codeStr) && codeStr[end] >= '0' && codeStr[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return hiperrors.ExitCodeUnknown
+	}
+	code := 0
+	for _, c := range codeStr[:end] {
+		code = code*10 + int(c-'0')
+	}
+	return code
 }

@@ -24,14 +24,14 @@ All Helm repositories and configurations are already set up and ready to use.`,
 			}
 
 			log.Debugf("%s Looking for %s daemon", logz.LogHost(), color.CyanString(name))
-			pod, err := internal.Pod.GetDaemonPod(name)
+			pod, err := internal.Pod().GetDaemonPod(name)
 			if err != nil {
 				return err
 			}
 			log.Infof("%s Opening interactive shell in %s daemon", logz.LogHost(), color.CyanString(pod.Name))
 			log.Infof("Type 'exit' or press Ctrl+D to close the shell")
 
-			return internal.Pod.OpenInteractiveShell(cmd.Context(), pod, shell)
+			return internal.Pod().OpenInteractiveShell(cmd.Context(), pod, shell)
 		},
 	}
 	shellCmd.Flags().StringVar(&name, "name", "", "Daemon name (required)")

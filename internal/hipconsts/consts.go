@@ -8,4 +8,6 @@ const (
 	AnnotationLastRepoUpdateTime = "helm-in-pod/last-repo-update-time"
 
 	EnvDaemonName = "HELM_IN_POD_DAEMON_NAME"
+
+	LabelOperationID = "helm-in-pod/operation-id"
 )

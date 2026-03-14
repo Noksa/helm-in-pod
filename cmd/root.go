@@ -34,6 +34,7 @@ func newRootCmd() *cobra.Command {
 		if !helpers.IsCompletionCmd(cmd) {
 			log.Infof("Running %v command", color.CyanString(cmd.Name()))
 		}
+		internal.InitManagers()
 		return nil
 	}
 	rootCmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {

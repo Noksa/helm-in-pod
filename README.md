@@ -57,7 +57,7 @@ When `helm` runs commands from your local machine, network latency to distant Ku
 
 ---
 
-## ⚡ NEW: Daemon Mode
+## ⚡ Daemon Mode
 
 > 🔥 **Run multiple commands without pod recreation overhead!**
 
@@ -98,16 +98,21 @@ helm in-pod exec [FLAGS] -- "COMMAND"
 
 ### 🔧 Available Flags
 
-| Flag              | Short | Description                                |
-|-------------------|-------|--------------------------------------------|
-| `--copy`          | `-c`  | Copy files/folders from host to pod        |
-| `--env`           | `-e`  | Set environment variables                  |
-| `--subst-env`     | `-s`  | Substitute environment variables from host |
-| `--image`         | `-i`  | Use custom Docker image                    |
-| `--update-repo`   |       | Update specified Helm repositories         |
-| `--tolerations`   |       | Pod tolerations for node taints            |
-| `--node-selector` |       | Pod node selectors for node targeting      |
-| `--host-network`  |       | Use host network in pod                    |
+| Flag                | Short | Description                                |
+|---------------------|-------|--------------------------------------------|
+| `--copy`            | `-c`  | Copy files/folders from host to pod        |
+| `--env`             | `-e`  | Set environment variables                  |
+| `--subst-env`       | `-s`  | Substitute environment variables from host |
+| `--image`           | `-i`  | Use custom Docker image                    |
+| `--cpu-request`     |       | Pod's CPU request                          |
+| `--cpu-limit`       |       | Pod's CPU limit                            |
+| `--memory-request`  |       | Pod's memory request                       |
+| `--memory-limit`    |       | Pod's memory limit                         |
+| `--create-pdb`      |       | Create PodDisruptionBudget (default: true) |
+| `--update-repo`     |       | Update specified Helm repositories         |
+| `--tolerations`     |       | Pod tolerations for node taints            |
+| `--node-selector`   |       | Pod node selectors for node targeting      |
+| `--host-network`    |       | Use host network in pod                    |
 
 ---
 

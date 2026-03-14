@@ -16,8 +16,8 @@ func newPurgeCmd() *cobra.Command {
 	purgeCmd.Flags().BoolVar(&opts.All, "all", false, "Removes all things which were created in a k8s cluster")
 	purgeCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		var mErr error
-		mErr = multierr.Append(mErr, internal.Namespace.DeleteClusterRoleBinding())
-		mErr = multierr.Append(mErr, internal.Pod.DeleteHelmPods(cmdoptions.ExecOptions{}, opts))
+		mErr = multierr.Append(mErr, internal.Namespace().DeleteClusterRoleBinding())
+		mErr = multierr.Append(mErr, internal.Pod().DeleteHelmPods(cmdoptions.ExecOptions{}, opts))
 		return mErr
 	}
 	return purgeCmd

@@ -33,14 +33,22 @@ func buildPodSpec(opts cmdoptions.ExecOptions) (corev1.PodSpec, error) {
 		Value: strconv.Itoa(int(opts.Timeout.Seconds())),
 	})
 
-	resourceList := corev1.ResourceList{}
+	requests := corev1.ResourceList{}
+	limits := corev1.ResourceList{}
 
-	if opts.Cpu != "" && opts.Cpu != "0" {
-		resourceList["cpu"] = resource.MustParse(opts.Cpu)
+	if opts.CpuRequest != "" && opts.CpuRequest != "0" {
+		requests["cpu"] = resource.MustParse(opts.CpuRequest)
 	}
-	if opts.Memory != "" && opts.Memory != "0" {
-		resourceList["memory"] = resource.MustParse(opts.Memory)
+	if opts.CpuLimit != "" && opts.CpuLimit != "0" {
+		limits["cpu"] = resource.MustParse(opts.CpuLimit)
 	}
+	if opts.MemoryRequest != "" && opts.MemoryRequest != "0" {
+		requests["memory"] = resource.MustParse(opts.MemoryRequest)
+	}
+	if opts.MemoryLimit != "" && opts.MemoryLimit != "0" {
+		limits["memory"] = resource.MustParse(opts.MemoryLimit)
+	}
+
 	securityContext := &corev1.SecurityContext{}
 	if opts.RunAsUser > -1 {
 		securityContext.RunAsUser = gopointer.NewOf(opts.RunAsUser)
@@ -76,10 +84,10 @@ func buildPodSpec(opts cmdoptions.ExecOptions) (corev1.PodSpec, error) {
 		AutomountServiceAccountToken:  gopointer.NewOf(true),
 		TerminationGracePeriodSeconds: gopointer.NewOf[int64](300),
 	}
-	if len(resourceList) > 0 {
+	if len(requests) > 0 || len(limits) > 0 {
 		podSpec.Resources = &corev1.ResourceRequirements{
-			Requests: resourceList,
-			Limits:   resourceList,
+			Requests: requests,
+			Limits:   limits,
 		}
 	}
 

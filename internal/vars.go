@@ -4,39 +4,50 @@ import (
 	"context"
 	"os"
 
+	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/noksa/helm-in-pod/internal/hipns"
 	"github.com/noksa/helm-in-pod/internal/hippod"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (
-	Namespace *hipns.Manager
-	Pod       *hippod.Manager
+	namespace *hipns.Manager
+	pod       *hippod.Manager
 )
 
-func getClientConfig() *rest.Config {
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	configOverrides := &clientcmd.ConfigOverrides{}
-
+// buildConfigOverrides returns clientcmd.ConfigOverrides respecting HELM_KUBECONTEXT.
+// Extracted for testability.
+func buildConfigOverrides() *clientcmd.ConfigOverrides {
+	overrides := &clientcmd.ConfigOverrides{}
 	if ctx := os.Getenv("HELM_KUBECONTEXT"); ctx != "" {
-		configOverrides.CurrentContext = ctx
+		overrides.CurrentContext = ctx
 	}
+	return overrides
+}
 
-	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
+func InitManagers() {
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		clientcmd.NewDefaultClientConfigLoadingRules(),
+		buildConfigOverrides(),
+	)
 	config, err := kubeConfig.ClientConfig()
 	if err != nil {
 		panic(err)
 	}
-	return config
-}
 
-func init() {
-	clientSet := kubernetes.NewForConfigOrDie(getClientConfig())
+	operatorkclient.SetDefaultConfig(config)
+
 	hostname, _ := os.Hostname()
 	ctx := context.Background()
 
-	Namespace = hipns.NewManager(clientSet, ctx)
-	Pod = hippod.NewManager(clientSet, ctx, hostname)
+	namespace = hipns.NewManager(ctx)
+	pod = hippod.NewManager(ctx, hostname)
+}
+
+func Namespace() *hipns.Manager {
+	return namespace
+}
+
+func Pod() *hippod.Manager {
+	return pod
 }

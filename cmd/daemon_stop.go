@@ -19,7 +19,7 @@ func newDaemonStopCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			_, err = internal.Pod.GetDaemonPod(name)
+			_, err = internal.Pod().GetDaemonPod(name)
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
 					log.Infof("Daemon %s doesn't exist", color.CyanString(name))
@@ -27,7 +27,7 @@ func newDaemonStopCmd() *cobra.Command {
 				}
 				return err
 			}
-			return internal.Pod.DeleteDaemonPod(name)
+			return internal.Pod().DeleteDaemonPod(name)
 		},
 	}
 	stopCmd.Flags().StringVar(&name, "name", "", "Daemon name (required)")

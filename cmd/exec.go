@@ -14,7 +14,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"go.uber.org/multierr"
 )
 
 func newExecCmd() *cobra.Command {
@@ -25,7 +24,7 @@ func newExecCmd() *cobra.Command {
 	}
 	opts := cmdoptions.ExecOptions{}
 	addExecOptionsFlags(execCmd, &opts)
-	execCmd.RunE = func(cmd *cobra.Command, args []string) error {
+	execCmd.RunE = func(cmd *cobra.Command, args []string) (returnErr error) {
 		if len(args) == 0 {
 			return fmt.Errorf("specify command to run. Run `helm in-pod exec --help` to check available options")
 		}
@@ -39,10 +38,12 @@ func newExecCmd() *cobra.Command {
 		timeout := viper.GetDuration("timeout")
 		opts.Timeout = timeout + time.Minute*10
 
-		var mErr error
-		defer multierr.AppendInvoke(&mErr, multierr.Invoke(func() error {
-			return internal.Pod.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
-		}))
+		defer func() {
+			cleanupErr := internal.Pod().DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
+			if cleanupErr != nil && returnErr == nil {
+				returnErr = cleanupErr
+			}
+		}()
 
 		// Parse file mappings
 		if len(opts.Files) > 0 {
@@ -57,18 +58,18 @@ func newExecCmd() *cobra.Command {
 		}
 
 		// Prepare namespace and create pod
-		err := internal.Namespace.PrepareNs()
+		err := internal.Namespace().PrepareNs()
 		if err != nil {
 			return err
 		}
 
-		pod, err := internal.Pod.CreateHelmPod(opts)
+		pod, err := internal.Pod().CreateHelmPod(opts)
 		if err != nil {
 			return err
 		}
 
 		// Get pod user info
-		userInfo, err := internal.Pod.GetPodUserInfo(pod)
+		userInfo, err := internal.Pod().GetPodUserInfo(pod)
 		if err != nil {
 			return err
 		}
@@ -90,21 +91,21 @@ func newExecCmd() *cobra.Command {
 
 		// Sync helm repositories if needed
 		if opts.CopyRepo && helmFound {
-			err = internal.Pod.SyncHelmRepositories(pod, opts, userInfo.HomeDirectory, isHelm4)
+			err = internal.Pod().SyncHelmRepositories(pod, opts, userInfo.HomeDirectory, isHelm4)
 			if err != nil {
 				return err
 			}
 		}
 
 		// Copy user files
-		err = internal.Pod.CopyUserFiles(pod, opts, expand, nil)
+		err = internal.Pod().CopyUserFiles(pod, opts, expand, nil)
 		if err != nil {
 			return err
 		}
 
 		// Execute command
 		cmdToUse := strings.Join(args, " ")
-		return internal.Pod.ExecuteCommand(cmd.Context(), pod, cmdToUse, userInfo.HomeDirectory, opts)
+		return internal.Pod().ExecuteCommand(cmd.Context(), pod, cmdToUse, userInfo.HomeDirectory, opts)
 	}
 	return execCmd
 }
