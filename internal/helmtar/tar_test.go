@@ -18,7 +18,7 @@ func extractTarGz(buf *bytes.Buffer) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 
 	tr := tar.NewReader(gr)
 	files := map[string]string{}
@@ -50,7 +50,7 @@ var _ = Describe("Compress", func() {
 		var err error
 		tmpDir, err = os.MkdirTemp("", "helmtar-test-*")
 		Expect(err).NotTo(HaveOccurred())
-		DeferCleanup(func() { os.RemoveAll(tmpDir) })
+		DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
 	})
 
 	Context("single file", func() {
