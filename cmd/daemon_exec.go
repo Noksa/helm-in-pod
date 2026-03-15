@@ -73,14 +73,7 @@ func newDaemonExecCmd() *cobra.Command {
 			}
 
 			if len(opts.Files) > 0 {
-				opts.FilesAsMap = map[string]string{}
-				for _, val := range opts.Files {
-					entries := strings.SplitSeq(val, ",")
-					for v := range entries {
-						splitted := strings.Split(v, ":")
-						opts.FilesAsMap[splitted[0]] = splitted[1]
-					}
-				}
+				opts.ParseFileMappings()
 				err = internal.Pod().CopyUserFiles(pod, opts.ExecOptions, expand, opts.Clean)
 				if err != nil {
 					return err

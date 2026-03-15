@@ -1,6 +1,9 @@
 package cmdoptions
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type ExecOptions struct {
 	Image           string
@@ -36,4 +39,21 @@ type ExecOptions struct {
 	ServiceAccount     string
 	DryRun             bool
 	CopyFrom           []string
+}
+
+// ParseFileMappings parses the Files slice into FilesAsMap.
+// Each entry may contain comma-separated key:value pairs.
+func (o *ExecOptions) ParseFileMappings() {
+	if len(o.Files) == 0 {
+		return
+	}
+	o.FilesAsMap = make(map[string]string, len(o.Files))
+	for _, val := range o.Files {
+		for v := range strings.SplitSeq(val, ",") {
+			parts := strings.SplitN(v, ":", 2)
+			if len(parts) == 2 {
+				o.FilesAsMap[parts[0]] = parts[1]
+			}
+		}
+	}
 }

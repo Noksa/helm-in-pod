@@ -20,7 +20,6 @@ import (
 	"github.com/noksa/helm-in-pod/internal/hipretry"
 	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
-	"go.uber.org/multierr"
 	"helm.sh/helm/v4/pkg/cli"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,7 +43,7 @@ func (m *Manager) GetPodUserInfo(pod *corev1.Pod) (*UserInfo, error) {
 			`echo "${HOME}:::$(whoami):::$(id)"`,
 			Namespace, pod.Name, pod.Namespace, nil)
 		if err != nil {
-			return multierr.Append(fmt.Errorf("%s", stderr), err)
+			return fmt.Errorf("%s: %w", stderr, err)
 		}
 		return nil
 	})
@@ -93,7 +92,7 @@ func (m *Manager) SyncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOpti
 			`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null`,
 			Namespace, pod.Name, pod.Namespace, nil)
 		if err != nil {
-			return multierr.Append(fmt.Errorf("%s", stderr), err)
+			return fmt.Errorf("%s: %w", stderr, err)
 		}
 		return nil
 	})
@@ -134,14 +133,14 @@ func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 			stdout, stderr, err := m.client().RunCommandInPod(cmdToUse,
 				Namespace, pod.Name, pod.Namespace, nil)
 			if err != nil {
-				return multierr.Append(err, fmt.Errorf("%v\n%v", stdout, stderr))
+				return fmt.Errorf("%w\n%v\n%v", err, stdout, stderr)
 			}
 			log.Debugf("%v Helm repository updates have been fetched", logz.LogPod())
 			return nil
 		})
 	}
 
-	var mErr error
+	var errs []error
 	for _, repo := range opts.UpdateRepo {
 		err := hipretry.Retry(opts.UpdateRepoAttempts, func() error {
 			log.Infof("%v Fetching updates from %v helm repository", logz.LogPod(), color.CyanString(repo))
@@ -152,16 +151,16 @@ func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 			stdout, stderr, err := m.client().RunCommandInPod(cmdToUse,
 				Namespace, pod.Name, pod.Namespace, nil)
 			if err != nil {
-				return multierr.Append(err, fmt.Errorf("%v\n%v", stdout, stderr))
+				return fmt.Errorf("%w\n%v\n%v", err, stdout, stderr)
 			}
 			log.Debugf("%v %v helm repository updates have been fetched", logz.LogPod(), color.CyanString(repo))
 			return nil
 		})
 		if err != nil {
-			mErr = multierr.Append(mErr, err)
+			errs = append(errs, err)
 		}
 	}
-	return mErr
+	return errors.Join(errs...)
 }
 
 func (m *Manager) CopyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions, expandPath func(string) (string, error), cleanPaths []string) error {

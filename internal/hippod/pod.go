@@ -25,8 +25,8 @@ import (
 	"github.com/noksa/helm-in-pod/internal/hipretry"
 	"github.com/noksa/helm-in-pod/internal/logz"
 	log "github.com/sirupsen/logrus"
-	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
@@ -192,7 +192,7 @@ func (m *Manager) waitUntilPodIsDeleted(podName string) error {
 	for time.Since(start) <= timeout {
 		_, err := m.client().ClientSet().CoreV1().Pods(Namespace).Get(m.ctx, podName, metav1.GetOptions{})
 		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
+			if k8serrors.IsNotFound(err) {
 				log.Infof("%v Pod %v has been deleted", logz.LogHost(), color.CyanString(podName))
 				return nil
 			}
@@ -251,7 +251,7 @@ tar zxf - -C /`, dir)},
 			Tty:    false,
 		})
 		if err != nil {
-			return multierr.Append(err, fmt.Errorf("%s", b.String()))
+			return fmt.Errorf("%w: %s", err, b.String())
 		}
 		log.Debugf("%v %v %v has been copied to %v", logz.LogHost(), logz.LogPod(), color.CyanString(srcPath), color.MagentaString(destPath))
 		return nil
@@ -295,7 +295,7 @@ func (m *Manager) CopyFileFromPod(pod *corev1.Pod, podPath string, hostPath stri
 			Tty:    false,
 		})
 		if err != nil {
-			return multierr.Append(err, fmt.Errorf("%s", errBuf.String()))
+			return fmt.Errorf("%w: %s", err, errBuf.String())
 		}
 
 		// Extract the tar.gz archive to the host path

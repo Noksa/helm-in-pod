@@ -10,6 +10,8 @@ import (
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
 
+var helmVersionRe = regexp.MustCompile(`v(\d+)\.`)
+
 // GetHelmMajorVersion returns the major version of Helm running in the specified pod
 // Returns 0 if version cannot be determined
 func GetHelmMajorVersion(podName, podNamespace, image string) (int, error) {
@@ -29,8 +31,7 @@ func GetHelmMajorVersion(podName, podNamespace, image string) (int, error) {
 	}
 
 	// Extract major version from output like "v3.14.0" or "v4.0.0"
-	re := regexp.MustCompile(`v(\d+)\.`)
-	matches := re.FindStringSubmatch(stdout)
+	matches := helmVersionRe.FindStringSubmatch(stdout)
 	if len(matches) < 2 {
 		return 0, fmt.Errorf("could not parse helm version from output: %s", stdout)
 	}

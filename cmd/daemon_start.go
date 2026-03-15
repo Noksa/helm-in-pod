@@ -50,16 +50,7 @@ func newDaemonStartCmd() *cobra.Command {
 				return internal.Pod().PrintPodSpecYAML(opts.ExecOptions, true)
 			}
 
-			if len(opts.Files) > 0 {
-				opts.FilesAsMap = map[string]string{}
-				for _, val := range opts.Files {
-					entries := strings.SplitSeq(val, ",")
-					for v := range entries {
-						splitted := strings.Split(v, ":")
-						opts.FilesAsMap[splitted[0]] = splitted[1]
-					}
-				}
-			}
+			opts.ParseFileMappings()
 
 			err = internal.Namespace().PrepareNs()
 			if err != nil {
