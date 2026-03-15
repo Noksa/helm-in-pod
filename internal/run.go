@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/noksa/helm-in-pod/internal/logz"
 	"github.com/spf13/cobra"
 )
 
@@ -18,7 +18,7 @@ func RunCommand(cmd *cobra.Command) error {
 		return err
 	}
 	if dur <= 0 {
-		log.Debug("Sets default timeout to 2h")
+		logz.Host().Debug().Msg("Sets default timeout to 2h")
 		dur = time.Hour * 2
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), dur)

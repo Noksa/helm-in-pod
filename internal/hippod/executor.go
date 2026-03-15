@@ -19,7 +19,6 @@ import (
 	"github.com/noksa/helm-in-pod/internal/hiperrors"
 	"github.com/noksa/helm-in-pod/internal/hipretry"
 	"github.com/noksa/helm-in-pod/internal/logz"
-	log "github.com/sirupsen/logrus"
 	"helm.sh/helm/v4/pkg/cli"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,7 +35,7 @@ func (m *Manager) GetPodUserInfo(pod *corev1.Pod) (*UserInfo, error) {
 	var stdout string
 
 	err := hipretry.Retry(3, func() error {
-		log.Debugf("%v Determining user home directory", logz.LogPod())
+		logz.Pod().Debug().Msg("Determining user home directory")
 		var stderr string
 		var err error
 		stdout, stderr, err = m.client().RunCommandInPod(
@@ -68,7 +67,7 @@ func (m *Manager) GetPodUserInfo(pod *corev1.Pod) (*UserInfo, error) {
 		return nil, fmt.Errorf("user (%v) in the image doesn't have home directory", userInfo)
 	}
 
-	log.Debugf("%v (%v) home directory: %v", logz.LogPod(), color.GreenString(whoami), color.MagentaString(homeDirectory))
+	logz.Pod().Debug().Msgf("(%v) home directory: %v", color.GreenString(whoami), color.MagentaString(homeDirectory))
 	return &UserInfo{
 		HomeDirectory: homeDirectory,
 		Whoami:        whoami,
@@ -87,7 +86,7 @@ func (m *Manager) SyncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOpti
 	}
 
 	err := hipretry.Retry(opts.CopyAttempts, func() error {
-		log.Debugf("%v Creating %v/.config/helm directory", logz.LogPod(), homeDirectory)
+		logz.Pod().Debug().Msgf("Creating %v/.config/helm directory", homeDirectory)
 		_, stderr, err := m.client().RunCommandInPod(
 			`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null`,
 			Namespace, pod.Name, pod.Namespace, nil)
@@ -125,7 +124,7 @@ func (m *Manager) UpdateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, isHelm4 bool) error {
 	if len(opts.UpdateRepo) == 0 {
 		return hipretry.Retry(opts.UpdateRepoAttempts, func() error {
-			log.Infof("%v Fetching updates from %v helm repositories", logz.LogPod(), color.GreenString("all"))
+			logz.Pod().Info().Msgf("Fetching updates from %v helm repositories", color.GreenString("all"))
 			cmdToUse := "helm repo update"
 			if !isHelm4 {
 				cmdToUse = fmt.Sprintf("%v --fail-on-repo-update-fail", cmdToUse)
@@ -135,7 +134,7 @@ func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 			if err != nil {
 				return fmt.Errorf("%w\n%v\n%v", err, stdout, stderr)
 			}
-			log.Debugf("%v Helm repository updates have been fetched", logz.LogPod())
+			logz.Pod().Debug().Msg("Helm repository updates have been fetched")
 			return nil
 		})
 	}
@@ -143,7 +142,7 @@ func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 	var errs []error
 	for _, repo := range opts.UpdateRepo {
 		err := hipretry.Retry(opts.UpdateRepoAttempts, func() error {
-			log.Infof("%v Fetching updates from %v helm repository", logz.LogPod(), color.CyanString(repo))
+			logz.Pod().Info().Msgf("Fetching updates from %v helm repository", color.CyanString(repo))
 			cmdToUse := fmt.Sprintf("helm repo update %v", repo)
 			if !isHelm4 {
 				cmdToUse = fmt.Sprintf("%v --fail-on-repo-update-fail", cmdToUse)
@@ -153,7 +152,7 @@ func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 			if err != nil {
 				return fmt.Errorf("%w\n%v\n%v", err, stdout, stderr)
 			}
-			log.Debugf("%v %v helm repository updates have been fetched", logz.LogPod(), color.CyanString(repo))
+			logz.Pod().Debug().Msgf("%v helm repository updates have been fetched", color.CyanString(repo))
 			return nil
 		})
 		if err != nil {
@@ -167,7 +166,7 @@ func (m *Manager) CopyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions, ex
 	// Delete specified paths first to ensure clean state
 	if len(cleanPaths) > 0 {
 		cmd := fmt.Sprintf("rm -rf %s", strings.Join(cleanPaths, " "))
-		log.Debugf("%v Cleaning up files: %v", logz.LogPod(), cmd)
+		logz.Pod().Debug().Msgf("Cleaning up files: %v", cmd)
 		stdOut, stdErr, err := m.client().RunCommandInPod(cmd, Namespace, pod.Name, pod.Namespace, nil)
 		if err != nil {
 			return fmt.Errorf("%v\n%v\n%v", err, stdErr, stdOut)
@@ -225,7 +224,7 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 		return err
 	}
 
-	log.Infof("%v Running '%v' command", logz.LogPod(), color.YellowString(command))
+	logz.Pod().Info().Msgf("Running '%v' command", color.YellowString(command))
 
 	b := &bytes.Buffer{}
 	var logWriter io.Writer
@@ -247,7 +246,7 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 
 	go func() {
 		<-ctx.Done()
-		log.Warnf("%v Timed out!", logz.LogHost())
+		logz.Host().Warn().Msg("Timed out!")
 		for {
 			_, _, err := m.client().RunCommandInPod("kill -term 1",
 				hipconsts.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
@@ -270,8 +269,6 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 				continue
 			}
 			if phase == corev1.PodFailed || phase == corev1.PodSucceeded {
-				// Pod finished — do one final log stream to catch remaining output
-				// (e.g. the exit code marker for fast commands)
 				_ = m.StreamLogsFromPod(context.Background(), pod, logWriter, since)
 				return
 			}
@@ -280,11 +277,10 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 			if err == nil {
 				return
 			}
-			// In copy-from mode, if we got the marker, stop streaming
 			if copyFromMode && mw.Found() {
 				return
 			}
-			log.Infof("got an error from streaming pod logs: %v", err)
+			logz.Host().Info().Msgf("got an error from streaming pod logs: %v", err)
 			time.Sleep(time.Millisecond * 25)
 		}
 	})
@@ -292,7 +288,7 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 
 	if copyFromMode && mw.Found() {
 		code := mw.ExitCode()
-		log.Infof("%v Command exited with code %d (pod kept alive for copy-from)", logz.LogPod(), code)
+		logz.Pod().Info().Msgf("Command exited with code %d (pod kept alive for copy-from)", code)
 		if code != 0 {
 			return &hiperrors.ExitCodeError{Code: int32(code)}
 		}
@@ -360,7 +356,7 @@ func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, c
 		return err
 	}
 
-	log.Infof("%v Running '%v' command", logz.LogPod(), color.YellowString(command))
+	logz.Pod().Info().Msgf("Running '%v' command", color.YellowString(command))
 
 	runOpts := operatorkclient.RunCommandInPodOptions{
 		Context:       ctx,
@@ -376,7 +372,7 @@ func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, c
 	_, _, err = m.client().RunCommandInPodWithOptions(runOpts)
 	if err != nil {
 		if code := parseExitCodeFromError(err); code != hiperrors.ExitCodeUnknown {
-			log.Infof("%v Command exited with code %d", logz.LogPod(), code)
+			logz.Pod().Info().Msgf("Command exited with code %d", code)
 			return &hiperrors.ExitCodeError{Code: int32(code)}
 		}
 	}
@@ -384,7 +380,7 @@ func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, c
 }
 
 func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) error {
-	log.Debugf("%v Waiting 60s until pod phase is changed to failed/succeeded", logz.LogHost())
+	logz.Host().Debug().Msg("Waiting 60s until pod phase is changed to failed/succeeded")
 
 	timeout := time.Second * 60
 	start := time.Now()
@@ -399,7 +395,7 @@ func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) err
 		time.Sleep(time.Millisecond * 100)
 	}
 
-	log.Debugf("%v Pod got phase: %v", logz.LogHost(), color.CyanString("%v", phase))
+	logz.Host().Debug().Msgf("Pod got phase: %v", color.CyanString("%v", phase))
 
 	if phase == corev1.PodFailed {
 		if ctx.Err() != nil {
@@ -408,7 +404,7 @@ func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) err
 		// Extract the actual exit code from the container status
 		exitCode := m.getContainerExitCode(pod)
 		if exitCode != hiperrors.ExitCodeUnknown {
-			log.Infof("%v Command exited with code %d", logz.LogPod(), exitCode)
+			logz.Pod().Info().Msgf("Command exited with code %d", exitCode)
 			return &hiperrors.ExitCodeError{Code: exitCode}
 		}
 		return fmt.Errorf("pod failed")
@@ -522,11 +518,11 @@ func (w *exitCodeMarkerWriter) ExitCode() int {
 // SignalCopyDone creates the sentinel file in the pod to let it know
 // that copy-from is complete and it can exit.
 func (m *Manager) SignalCopyDone(pod *corev1.Pod) {
-	log.Debugf("%v %v Signaling copy-done", logz.LogHost(), logz.LogPod())
+	logz.HostPod().Debug().Msg("Signaling copy-done")
 	_, _, err := m.client().RunCommandInPod(
 		fmt.Sprintf("touch %s", hipconsts.CopyFromDoneFile),
 		hipconsts.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
 	if err != nil {
-		log.Debugf("%v Failed to signal copy-done (pod may have already exited): %v", logz.LogHost(), err)
+		logz.Host().Debug().Msgf("Failed to signal copy-done (pod may have already exited): %v", err)
 	}
 }

@@ -6,7 +6,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/helpers"
-	log "github.com/sirupsen/logrus"
+	"github.com/noksa/helm-in-pod/internal/logz"
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -28,18 +29,18 @@ func newRootCmd() *cobra.Command {
 	_ = viper.BindPFlag("timeout", rootCmd.PersistentFlags().Lookup("timeout"))
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if debug {
-			log.Info("Setting log level to debug")
-			log.SetLevel(log.DebugLevel)
+			logz.Host().Info().Msg("Setting log level to debug")
+			zerolog.SetGlobalLevel(zerolog.DebugLevel)
 		}
 		if !helpers.IsCompletionCmd(cmd) {
-			log.Infof("Running %v command", color.CyanString(cmd.Name()))
+			logz.Host().Info().Msgf("Running %v command", color.CyanString(cmd.Name()))
 		}
 		internal.InitManagers()
 		return nil
 	}
 	rootCmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
 		if !helpers.IsCompletionCmd(cmd) {
-			log.Infof("%v command took %v", color.CyanString(cmd.Name()), color.GreenString("%v", time.Since(startTime).Round(time.Millisecond)))
+			logz.Host().Info().Msgf("%v command took %v", color.CyanString(cmd.Name()), color.GreenString("%v", time.Since(startTime).Round(time.Millisecond)))
 		}
 		return nil
 	}

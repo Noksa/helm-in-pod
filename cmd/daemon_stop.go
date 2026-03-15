@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal"
-	log "github.com/sirupsen/logrus"
+	"github.com/noksa/helm-in-pod/internal/logz"
 	"github.com/spf13/cobra"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -22,7 +22,7 @@ func newDaemonStopCmd() *cobra.Command {
 			_, err = internal.Pod().GetDaemonPod(name)
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
-					log.Infof("Daemon %s doesn't exist", color.CyanString(name))
+					logz.Host().Info().Msgf("Daemon %s doesn't exist", color.CyanString(name))
 					return nil
 				}
 				return err

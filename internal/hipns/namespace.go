@@ -5,7 +5,6 @@ import (
 
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/noksa/helm-in-pod/internal/logz"
-	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,7 +28,7 @@ func (m *Manager) PrepareNs() error {
 		return err
 	}
 	if ns == nil || ns.Name == "" {
-		log.Debugf("%v Creating '%v' ns", logz.LogHost(), Name)
+		logz.Host().Debug().Msgf("Creating '%v' ns", Name)
 		_, err = cs.CoreV1().Namespaces().Create(m.ctx, &v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: Name},
 		}, metav1.CreateOptions{})
@@ -42,7 +41,7 @@ func (m *Manager) PrepareNs() error {
 		return err
 	}
 	if sa == nil || sa.Name == "" {
-		log.Debugf("%v Creating '%v' serviceaccount in '%v' ns", logz.LogHost(), Name, Name)
+		logz.Host().Debug().Msgf("Creating '%v' serviceaccount in '%v' ns", Name, Name)
 		_, err = cs.CoreV1().ServiceAccounts(Name).Create(m.ctx, &v1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{Name: Name},
 		}, metav1.CreateOptions{})
@@ -60,7 +59,7 @@ func (m *Manager) CreateClusterRoleBinding() error {
 		return err
 	}
 	if crb == nil || crb.Name == "" {
-		log.Debugf("%v Creating '%v' clusterrolebinging in '%v' ns", logz.LogHost(), Name, Name)
+		logz.Host().Debug().Msgf("Creating '%v' clusterrolebinding in '%v' ns", Name, Name)
 		_, err = cs.RbacV1().ClusterRoleBindings().Create(m.ctx, &rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{Name: Name},
 			Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: Name, Namespace: Name}},
@@ -84,7 +83,7 @@ func (m *Manager) DeleteClusterRoleBinding() error {
 		return err
 	}
 	if crb != nil && crb.Name != "" {
-		log.Debugf("%v Removing '%v' clusterrolebinging in '%v' ns", logz.LogHost(), Name, Name)
+		logz.Host().Debug().Msgf("Removing '%v' clusterrolebinding in '%v' ns", Name, Name)
 		err = cs.RbacV1().ClusterRoleBindings().Delete(m.ctx, Name, metav1.DeleteOptions{})
 		return err
 	}

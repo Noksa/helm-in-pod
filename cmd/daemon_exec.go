@@ -10,7 +10,6 @@ import (
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/logz"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -29,12 +28,12 @@ func newDaemonExecCmd() *cobra.Command {
 			if len(args) == 0 {
 				return fmt.Errorf("specify command to run")
 			}
-			log.Debugf("%s Looking for %s daemon", logz.LogHost(), color.CyanString(opts.Name))
+			logz.Host().Debug().Msgf("Looking for %s daemon", color.CyanString(opts.Name))
 			pod, err := internal.Pod().GetDaemonPod(opts.Name)
 			if err != nil {
 				return err
 			}
-			log.Infof("%s Found %s daemon", logz.LogHost(), color.CyanString(pod.Name))
+			logz.Host().Info().Msgf("Found %s daemon", color.CyanString(pod.Name))
 
 			homeDirectory := pod.Annotations[hipconsts.AnnotationHomeDirectory]
 			if homeDirectory == "" {

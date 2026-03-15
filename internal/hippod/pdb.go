@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
-	log "github.com/sirupsen/logrus"
+	"github.com/noksa/helm-in-pod/internal/logz"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -43,7 +43,7 @@ func (m *Manager) CreatePodDisruptionBudget(ctx context.Context, operationID str
 		return fmt.Errorf("failed to create PodDisruptionBudget: %w", err)
 	}
 
-	log.Debugf("Created PodDisruptionBudget for operation %s", operationID)
+	logz.Host().Debug().Msgf("Created PodDisruptionBudget for operation %s", operationID)
 	return nil
 }
 
@@ -62,6 +62,6 @@ func (m *Manager) DeletePodDisruptionBudgets(ctx context.Context, operationID st
 		return fmt.Errorf("failed to delete PodDisruptionBudgets: %w", err)
 	}
 
-	log.Debugf("Deleted PodDisruptionBudgets for operation %s", operationID)
+	logz.Host().Debug().Msgf("Deleted PodDisruptionBudgets for operation %s", operationID)
 	return nil
 }

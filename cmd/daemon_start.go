@@ -11,7 +11,6 @@ import (
 	"github.com/noksa/helm-in-pod/internal/helpers"
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/logz"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -78,7 +77,7 @@ func newDaemonStartCmd() *cobra.Command {
 			}
 
 			if !helmFound {
-				log.Warnf("%v helm is not installed in the image, all helm prerequisites will be skipped", logz.LogPod())
+				logz.Pod().Warn().Msg("helm is not installed in the image, all helm prerequisites will be skipped")
 			}
 
 			if opts.CopyRepo && helmFound {
@@ -106,7 +105,7 @@ func newDaemonStartCmd() *cobra.Command {
 				return err
 			}
 
-			log.Infof("Daemon pod '%s' started successfully", color.CyanString(pod.Name))
+			logz.Host().Info().Msgf("Daemon pod '%s' started successfully", color.CyanString(pod.Name))
 			return nil
 		},
 	}
