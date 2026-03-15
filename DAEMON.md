@@ -65,6 +65,8 @@ helm in-pod daemon exec --name my-daemon \
 helm in-pod daemon exec --name my-daemon --update-all-repos -- "helm upgrade ..."
 ```
 
+> ⚠️ **Important**: In `daemon exec`, `--copy-repo` defaults to `false` (unlike `exec` where it defaults to `true`). This is because the daemon pod typically already has repositories from `daemon start`. Pass `--copy-repo` explicitly if you need to re-sync repositories from the host.
+
 ### 3️⃣ Interactive Shell
 
 ```bash
@@ -184,12 +186,26 @@ helm in-pod daemon stop --name dev
 | Third run | ~10-15s | ~1-2s ⚡ |
 | 10 commands | ~100-150s | ~10-15s + 10-20s = **~30s** 🚀 |
 
+## 🔐 RBAC / Cluster Resources
+
+Daemon mode uses the same RBAC setup as `exec` mode. On first run, the plugin automatically creates:
+
+| Resource             | Name           | Details                                                        |
+|----------------------|----------------|----------------------------------------------------------------|
+| **Namespace**        | `helm-in-pod`  | Dedicated namespace for all plugin pods                        |
+| **ServiceAccount**   | `helm-in-pod`  | Created in the `helm-in-pod` namespace                         |
+| **ClusterRoleBinding** | `helm-in-pod` | Binds the ServiceAccount to the `cluster-admin` ClusterRole   |
+
+> ⚠️ **Security Note**: Daemon pods run with `cluster-admin` privileges, just like `exec` pods. See the [main README](README.md#-rbac--cluster-resources) for details.
+
 ## 🎛️ Available Flags
 
 ### `daemon start`
 All flags from `exec` command:
 - Pod creation: `--image`, `--cpu-request`, `--cpu-limit`, `--memory-request`, `--memory-limit`, `--tolerations`, `--node-selector`, `--host-network`
 - Security: `--run-as-user`, `--run-as-group`, `--image-pull-secret`
+- Metadata: `--labels`, `--annotations`
+- Image: `--pull-policy` (default: `IfNotPresent`)
 - Protection: `--create-pdb` (default: true) - Protects pod from voluntary disruptions
 - Helm: `--copy-repo`, `--update-repo`
 - Files: `--copy`
@@ -203,10 +219,12 @@ Runtime flags only (pod already exists):
 - `--subst-env`, `-s` - Substitute from host
 - `--copy`, `-c` - Copy files
 - `--clean` - Paths to delete before copying files (ensures clean state)
-- `--copy-repo` - Copy/replace helm repos
+- `--copy-repo` - Copy/replace helm repos (**default: false** — unlike `exec` where it defaults to true)
 - `--update-repo` - Update specific repos
 - `--update-all-repos` - Update all repos
 - `--copy-attempts`, `--update-repo-attempts`
+
+> 💡 **Tip**: `--copy-repo` defaults to `false` in `daemon exec` because the daemon pod typically already has repositories from `daemon start`. Use `--copy-repo` explicitly only when you need to re-sync repositories from the host after they've changed.
 
 ### `daemon shell`
 - `--name` - Daemon name (required)
@@ -214,6 +232,27 @@ Runtime flags only (pod already exists):
 
 ### `daemon stop`
 - `--name` - Daemon name (required)
+
+## ⏱️ Timeout Behavior
+
+Timeout works differently across daemon subcommands:
+
+| Subcommand     | Default Timeout | +10 min overhead | What it controls                                    |
+|----------------|-----------------|------------------|-----------------------------------------------------|
+| `daemon start` | 2h              | ✅ Yes            | Pod lifetime is `--timeout + 10m` (for startup, file copy, etc.) |
+| `daemon exec`  | 2h              | ❌ No             | Command execution timeout only (no overhead added)  |
+| `daemon stop`  | —               | —                | No timeout behavior                                 |
+
+> 💡 In `daemon start`, the extra 10 minutes ensures the pod stays alive long enough for setup operations (startup probe, file copy, repo sync) before your timeout window begins. In `daemon exec`, the timeout applies directly to the command execution with no additional overhead.
+
+## 🔁 Exit Code Propagation
+
+Like `exec`, daemon mode propagates exit codes from executed commands. If the command inside the daemon pod exits with code `N`, `helm in-pod daemon exec` also exits with code `N`. This makes daemon mode safe for CI/CD pipelines.
+
+```bash
+helm in-pod daemon exec --name ci -- "helm upgrade myapp repo/chart"
+echo $?  # prints the exit code from the command inside the pod
+```
 
 ## 🔧 How It Works
 
@@ -232,6 +271,7 @@ Runtime flags only (pod already exists):
 - Run multiple daemons with different names for isolation
 - Daemon pods are named `daemon-<name>` - you can see them with `kubectl get pods -n helm-in-pod`
 - **Use `daemon shell`** for interactive debugging and exploration with full Helm context
+- Remember that `--copy-repo` defaults to `false` in `daemon exec` — pass it explicitly if you need to re-sync repos
 
 ## 🆚 When to Use What?
 

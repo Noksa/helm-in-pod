@@ -1,6 +1,7 @@
 name: in-pod
 flags:
-  - debug
+  - verbose-logs
+  - timeout
   - h
   - help
 commands:
@@ -12,14 +13,81 @@ commands:
       - c
       - copy
       - copy-repo
-      - cpu
+      - cpu-request
+      - cpu-limit
+      - memory-request
+      - memory-limit
+      - create-pdb
       - e
       - env
       - i
       - image
       - labels
-      - memory
+      - annotations
       - s
       - subst-env
-      - timeout
       - update-repo
+      - copy-attempts
+      - update-repo-attempts
+      - tolerations
+      - node-selector
+      - host-network
+      - run-as-user
+      - run-as-group
+      - image-pull-secret
+      - pull-policy
+  - name: daemon
+    commands:
+      - name: start
+        flags:
+          - name
+          - f
+          - force
+          - c
+          - copy
+          - copy-repo
+          - cpu-request
+          - cpu-limit
+          - memory-request
+          - memory-limit
+          - create-pdb
+          - e
+          - env
+          - i
+          - image
+          - labels
+          - annotations
+          - s
+          - subst-env
+          - update-repo
+          - copy-attempts
+          - update-repo-attempts
+          - tolerations
+          - node-selector
+          - host-network
+          - run-as-user
+          - run-as-group
+          - image-pull-secret
+          - pull-policy
+      - name: exec
+        flags:
+          - name
+          - c
+          - copy
+          - copy-repo
+          - e
+          - env
+          - s
+          - subst-env
+          - update-repo
+          - update-all-repos
+          - clean
+          - copy-attempts
+          - update-repo-attempts
+      - name: shell
+        flags:
+          - name
+          - shell
+      - name: stop
+        flags:
+          - name

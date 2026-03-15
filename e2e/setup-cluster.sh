@@ -27,7 +27,12 @@ if kind get clusters 2>/dev/null | grep -q "^${E2E_CLUSTER_NAME}$"; then
     kind export kubeconfig --name "${E2E_CLUSTER_NAME}" --kubeconfig "${E2E_KUBECONFIG}"
 else
     cyber_log "Creating kind cluster: ${CYBER_G}${E2E_CLUSTER_NAME}${CYBER_X}"
-    kind create cluster --name "${E2E_CLUSTER_NAME}" --kubeconfig "${E2E_KUBECONFIG}" --wait 60s
+    KIND_ARGS=(--name "${E2E_CLUSTER_NAME}" --kubeconfig "${E2E_KUBECONFIG}" --wait 60s)
+    if [ -n "${KIND_NODE_IMAGE}" ]; then
+        KIND_ARGS+=(--image "${KIND_NODE_IMAGE}")
+        cyber_log "Using node image: ${CYBER_G}${KIND_NODE_IMAGE}${CYBER_X}"
+    fi
+    kind create cluster "${KIND_ARGS[@]}"
     cyber_ok "Cluster created with kubeconfig at ${CYBER_G}${E2E_KUBECONFIG}${CYBER_X}"
 fi
 

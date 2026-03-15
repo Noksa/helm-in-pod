@@ -32,6 +32,16 @@ When `helm` runs commands from your local machine, network latency to distant Ku
 
 - 🎯 **Helm 3 or Helm 4** installed on host machine
 
+> 💡 The plugin detects Helm 4 at runtime and automatically adjusts repository sync behavior accordingly. No manual configuration is needed.
+
+### 🖥️ Supported Platforms
+
+| OS      | Architecture |
+|---------|-------------|
+| Linux   | amd64, arm64 |
+| macOS   | amd64, arm64 |
+| Windows | amd64, arm64 |
+
 ---
 
 ## 🚀 Installation
@@ -78,6 +88,8 @@ helm in-pod daemon stop --name dev
 
 **10x faster** for multiple operations! Perfect for CI/CD, interactive development, and batch deployments.
 
+> 💡 Set `HELM_IN_POD_DAEMON_NAME` environment variable to avoid repeating `--name` on every command. See [DAEMON.md](DAEMON.md) for details.
+
 👉 **[Read Full Daemon Mode Documentation](DAEMON.md)**
 
 ---
@@ -96,23 +108,73 @@ helm in-pod --help
 helm in-pod exec [FLAGS] -- "COMMAND"
 ```
 
+> 💡 `run` is an alias for `exec`: `helm in-pod run [FLAGS] -- "COMMAND"`
+
 ### 🔧 Available Flags
 
-| Flag                | Short | Description                                |
-|---------------------|-------|--------------------------------------------|
-| `--copy`            | `-c`  | Copy files/folders from host to pod        |
-| `--env`             | `-e`  | Set environment variables                  |
-| `--subst-env`       | `-s`  | Substitute environment variables from host |
-| `--image`           | `-i`  | Use custom Docker image                    |
-| `--cpu-request`     |       | Pod's CPU request                          |
-| `--cpu-limit`       |       | Pod's CPU limit                            |
-| `--memory-request`  |       | Pod's memory request                       |
-| `--memory-limit`    |       | Pod's memory limit                         |
-| `--create-pdb`      |       | Create PodDisruptionBudget (default: true) |
-| `--update-repo`     |       | Update specified Helm repositories         |
-| `--tolerations`     |       | Pod tolerations for node taints            |
-| `--node-selector`   |       | Pod node selectors for node targeting      |
-| `--host-network`    |       | Use host network in pod                    |
+#### Global Flags
+
+| Flag              | Description                                                        |
+|-------------------|--------------------------------------------------------------------|
+| `--verbose-logs`  | Enable debug logs                                                  |
+| `--timeout`       | Gracefully terminate command after duration (default: 2h)          |
+
+> ⚠️ **Note**: The plugin adds 10 minutes to the specified `--timeout` internally for pod operations (startup, file copy, etc.). For example, `--timeout 2h` results in a total pod lifetime of 2h10m. The extra time ensures the pod stays alive long enough for setup and teardown around your command.
+
+#### Pod Creation Flags
+
+| Flag                  | Short | Description                                                                  |
+|-----------------------|-------|------------------------------------------------------------------------------|
+| `--image`             | `-i`  | Docker image to use (default: `docker.io/noksa/kubectl-helm:v1.34.5-v4.1.1`) |
+| `--cpu-request`       |       | Pod's CPU request (default: `1100m`)                                          |
+| `--cpu-limit`         |       | Pod's CPU limit (default: `1100m`)                                            |
+| `--memory-request`    |       | Pod's memory request (default: `500Mi`)                                       |
+| `--memory-limit`      |       | Pod's memory limit (default: `500Mi`)                                         |
+| `--create-pdb`        |       | Create PodDisruptionBudget (default: true)                                   |
+| `--tolerations`       |       | Pod tolerations for node taints                                              |
+| `--node-selector`     |       | Pod node selectors for node targeting                                        |
+| `--host-network`      |       | Use host network in pod                                                      |
+| `--run-as-user`       |       | User ID for security context                                                 |
+| `--run-as-group`      |       | Group ID for security context                                                |
+| `--labels`            |       | Additional labels on the pod                                                 |
+| `--annotations`       |       | Additional annotations on the pod                                            |
+| `--image-pull-secret` |       | Image pull secret for private repositories                                   |
+| `--pull-policy`       |       | Image pull policy (default: `IfNotPresent`)                                  |
+
+<details>
+<summary>⚠️ <strong>Deprecated Flags</strong></summary>
+
+The following flags still work but are deprecated and will be removed in a future release:
+
+| Deprecated Flag | Replacement                          |
+|-----------------|--------------------------------------|
+| `--cpu`         | `--cpu-request` and `--cpu-limit`    |
+| `--memory`      | `--memory-request` and `--memory-limit` |
+
+When using a deprecated flag, its value is applied to both the request and limit. You cannot combine deprecated flags with their replacements (e.g., `--cpu` with `--cpu-request` will error).
+
+</details>
+
+#### Runtime Flags
+
+| Flag                     | Short | Description                                             |
+|--------------------------|-------|---------------------------------------------------------|
+| `--copy`                 | `-c`  | Copy files/folders from host to pod                     |
+| `--env`                  | `-e`  | Set environment variables                               |
+| `--subst-env`            | `-s`  | Substitute environment variables from host              |
+| `--copy-repo`            |       | Copy existing Helm repositories to pod (default: true)  |
+| `--update-repo`          |       | Update specified Helm repositories                      |
+| `--copy-attempts`        |       | Retry count for copy actions (default: 3)               |
+| `--update-repo-attempts` |       | Retry count for repo update actions (default: 3)        |
+
+---
+
+## 🌍 Environment Variables
+
+| Variable                   | Description                                                                 |
+|----------------------------|-----------------------------------------------------------------------------|
+| `HELM_KUBECONTEXT`         | Override the Kubernetes context used by the plugin. When set, the plugin connects to this context instead of the current default. |
+| `HELM_IN_POD_DAEMON_NAME`  | Default daemon name for `daemon` subcommands, so you can omit `--name`. See [DAEMON.md](DAEMON.md). |
 
 ---
 
@@ -124,12 +186,38 @@ helm in-pod exec [FLAGS] -- "COMMAND"
 When you run `helm in-pod exec`, the following happens:
 
 1. 🏗️ **Pod Creation**: Creates a new `helm-in-pod` pod in the `helm-in-pod` namespace
-2. 📚 **Repository Sync**: Copies all existing Helm repositories from host to pod
+2. 📚 **Repository Sync**: Copies all existing Helm repositories from host to pod (Helm 4 sync is detected and handled automatically)
 3. 🔄 **Repository Updates**: Fetches updates for specified repositories
 4. 📁 **File Transfer**: Copies specified files/directories to the pod
 5. ▶️ **Command Execution**: Runs your specified command inside the pod
 
 </details>
+
+### 🔁 Exit Code Propagation
+
+The plugin propagates the exit code from the executed command. If the command inside the pod exits with code `N`, `helm in-pod` also exits with code `N`. This makes the plugin safe to use in CI/CD pipelines where non-zero exit codes signal failure.
+
+```bash
+# If "helm upgrade" fails with exit code 1, helm in-pod also exits with code 1
+helm in-pod exec -- "helm upgrade myapp repo/chart"
+echo $?  # prints the exit code from the command inside the pod
+```
+
+---
+
+## 🔐 RBAC / Cluster Resources
+
+When the plugin runs for the first time, it automatically creates the following Kubernetes resources:
+
+| Resource             | Name           | Details                                                        |
+|----------------------|----------------|----------------------------------------------------------------|
+| **Namespace**        | `helm-in-pod`  | Dedicated namespace for all plugin pods                        |
+| **ServiceAccount**   | `helm-in-pod`  | Created in the `helm-in-pod` namespace                         |
+| **ClusterRoleBinding** | `helm-in-pod` | Binds the ServiceAccount to the `cluster-admin` ClusterRole   |
+
+> ⚠️ **Security Note**: The pod runs with `cluster-admin` privileges. This grants full access to all cluster resources. Make sure this is acceptable in your environment before using the plugin.
+
+These resources are shared by both `exec` and `daemon` modes. Use `helm in-pod purge --all` to remove them (see [Purge](#-purge)).
 
 ---
 
@@ -311,3 +399,22 @@ helm in-pod exec -i "alpine:3.18" -- "apk add curl --no-cache && curl google.com
 ```
 
 </details>
+
+---
+
+## 🧹 Purge
+
+Remove leftover pods and resources created by `helm-in-pod` in the cluster:
+
+```bash
+# Remove remaining pods/garbage
+helm in-pod purge
+
+# Remove everything (including namespace-level resources)
+helm in-pod purge --all
+```
+
+| Command              | What it removes                                                                 |
+|----------------------|---------------------------------------------------------------------------------|
+| `purge`              | Leftover pods (from the current host) and the `helm-in-pod` ClusterRoleBinding  |
+| `purge --all`        | Everything above **plus** the `helm-in-pod` namespace and all resources within it |

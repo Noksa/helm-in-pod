@@ -92,11 +92,11 @@ var _ = Describe("buildPodSpec", func() {
 			spec, err := buildPodSpec(opts)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(spec.Resources).NotTo(BeNil())
-			Expect(spec.Resources.Requests.Cpu().String()).To(Equal("500m"))
-			Expect(spec.Resources.Limits.Cpu().String()).To(Equal("1"))
-			Expect(spec.Resources.Requests.Memory().String()).To(Equal("256Mi"))
-			Expect(spec.Resources.Limits.Memory().String()).To(Equal("512Mi"))
+			res := spec.Containers[0].Resources
+			Expect(res.Requests.Cpu().String()).To(Equal("500m"))
+			Expect(res.Limits.Cpu().String()).To(Equal("1"))
+			Expect(res.Requests.Memory().String()).To(Equal("256Mi"))
+			Expect(res.Limits.Memory().String()).To(Equal("512Mi"))
 		})
 
 		It("should handle request-only without limit", func() {
@@ -106,12 +106,12 @@ var _ = Describe("buildPodSpec", func() {
 			spec, err := buildPodSpec(opts)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(spec.Resources).NotTo(BeNil())
-			Expect(spec.Resources.Requests.Cpu().String()).To(Equal("500m"))
-			_, hasCpuLimit := spec.Resources.Limits["cpu"]
+			res := spec.Containers[0].Resources
+			Expect(res.Requests.Cpu().String()).To(Equal("500m"))
+			_, hasCpuLimit := res.Limits["cpu"]
 			Expect(hasCpuLimit).To(BeFalse())
-			Expect(spec.Resources.Requests.Memory().String()).To(Equal("256Mi"))
-			_, hasMemLimit := spec.Resources.Limits["memory"]
+			Expect(res.Requests.Memory().String()).To(Equal("256Mi"))
+			_, hasMemLimit := res.Limits["memory"]
 			Expect(hasMemLimit).To(BeFalse())
 		})
 
@@ -122,13 +122,13 @@ var _ = Describe("buildPodSpec", func() {
 			spec, err := buildPodSpec(opts)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(spec.Resources).NotTo(BeNil())
-			_, hasCpuReq := spec.Resources.Requests["cpu"]
+			res := spec.Containers[0].Resources
+			_, hasCpuReq := res.Requests["cpu"]
 			Expect(hasCpuReq).To(BeFalse())
-			Expect(spec.Resources.Limits.Cpu().String()).To(Equal("1"))
-			_, hasMemReq := spec.Resources.Requests["memory"]
+			Expect(res.Limits.Cpu().String()).To(Equal("1"))
+			_, hasMemReq := res.Requests["memory"]
 			Expect(hasMemReq).To(BeFalse())
-			Expect(spec.Resources.Limits.Memory().String()).To(Equal("512Mi"))
+			Expect(res.Limits.Memory().String()).To(Equal("512Mi"))
 		})
 
 		It("should skip resources entirely when all are empty", func() {
@@ -140,7 +140,9 @@ var _ = Describe("buildPodSpec", func() {
 			spec, err := buildPodSpec(opts)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(spec.Resources).To(BeNil())
+			res := spec.Containers[0].Resources
+			Expect(res.Requests).To(BeEmpty())
+			Expect(res.Limits).To(BeEmpty())
 		})
 
 		It("should skip resources with value '0'", func() {
@@ -152,7 +154,9 @@ var _ = Describe("buildPodSpec", func() {
 			spec, err := buildPodSpec(opts)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(spec.Resources).To(BeNil())
+			res := spec.Containers[0].Resources
+			Expect(res.Requests).To(BeEmpty())
+			Expect(res.Limits).To(BeEmpty())
 		})
 
 		It("should set request but skip limit when limit is '0'", func() {
@@ -164,12 +168,12 @@ var _ = Describe("buildPodSpec", func() {
 			spec, err := buildPodSpec(opts)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(spec.Resources).NotTo(BeNil())
-			Expect(spec.Resources.Requests.Cpu().String()).To(Equal("50m"))
-			_, hasCpuLimit := spec.Resources.Limits["cpu"]
+			res := spec.Containers[0].Resources
+			Expect(res.Requests.Cpu().String()).To(Equal("50m"))
+			_, hasCpuLimit := res.Limits["cpu"]
 			Expect(hasCpuLimit).To(BeFalse(), "cpu limit should be absent when set to '0'")
-			Expect(spec.Resources.Requests.Memory().String()).To(Equal("64Mi"))
-			_, hasMemLimit := spec.Resources.Limits["memory"]
+			Expect(res.Requests.Memory().String()).To(Equal("64Mi"))
+			_, hasMemLimit := res.Limits["memory"]
 			Expect(hasMemLimit).To(BeFalse(), "memory limit should be absent when set to '0'")
 		})
 
@@ -182,13 +186,13 @@ var _ = Describe("buildPodSpec", func() {
 			spec, err := buildPodSpec(opts)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(spec.Resources).NotTo(BeNil())
-			_, hasCpuReq := spec.Resources.Requests["cpu"]
+			res := spec.Containers[0].Resources
+			_, hasCpuReq := res.Requests["cpu"]
 			Expect(hasCpuReq).To(BeFalse(), "cpu request should be absent when set to '0'")
-			Expect(spec.Resources.Limits.Cpu().String()).To(Equal("500m"))
-			_, hasMemReq := spec.Resources.Requests["memory"]
+			Expect(res.Limits.Cpu().String()).To(Equal("500m"))
+			_, hasMemReq := res.Requests["memory"]
 			Expect(hasMemReq).To(BeFalse(), "memory request should be absent when set to '0'")
-			Expect(spec.Resources.Limits.Memory().String()).To(Equal("256Mi"))
+			Expect(res.Limits.Memory().String()).To(Equal("256Mi"))
 		})
 
 		It("should parse various resource formats", func() {
@@ -200,10 +204,11 @@ var _ = Describe("buildPodSpec", func() {
 			spec, err := buildPodSpec(opts)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(spec.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("2")))
-			Expect(spec.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("4000m")))
-			Expect(spec.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("1Gi")))
-			Expect(spec.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("2Gi")))
+			res := spec.Containers[0].Resources
+			Expect(res.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("2")))
+			Expect(res.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("4000m")))
+			Expect(res.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("1Gi")))
+			Expect(res.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("2Gi")))
 		})
 	})
 
@@ -508,8 +513,8 @@ var _ = Describe("buildDaemonPodSpec", func() {
 		spec, err := buildDaemonPodSpec(opts)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(spec.Resources).NotTo(BeNil())
-		Expect(spec.Resources.Requests.Cpu().String()).To(Equal("500m"))
+		res := spec.Containers[0].Resources
+		Expect(res.Requests.Cpu().String()).To(Equal("500m"))
 	})
 
 	It("should preserve tolerations from exec options", func() {

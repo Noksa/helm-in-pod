@@ -85,7 +85,7 @@ func buildPodSpec(opts cmdoptions.ExecOptions) (corev1.PodSpec, error) {
 		TerminationGracePeriodSeconds: gopointer.NewOf[int64](300),
 	}
 	if len(requests) > 0 || len(limits) > 0 {
-		podSpec.Resources = &corev1.ResourceRequirements{
+		podSpec.Containers[0].Resources = corev1.ResourceRequirements{
 			Requests: requests,
 			Limits:   limits,
 		}

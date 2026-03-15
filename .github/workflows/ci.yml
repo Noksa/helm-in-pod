@@ -50,9 +50,17 @@ jobs:
         run: make test-unit
 
   e2e-tests:
-    name: E2E Tests
+    name: E2E (k8s ${{ matrix.k8s-version || 'latest' }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        k8s-version:
+          - ''           # latest (kind default)
+          - 'v1.32.3'
+          - 'v1.30.8'
+          - 'v1.28.15'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -70,6 +78,14 @@ jobs:
 
       - name: Setup kind cluster
         run: make test-e2e-setup
+        env:
+          KIND_NODE_IMAGE: ${{ matrix.k8s-version }}
 
       - name: Run e2e tests
         run: make test-e2e
+        env:
+          KIND_NODE_IMAGE: ${{ matrix.k8s-version }}
+
+      - name: Teardown kind cluster
+        if: always()
+        run: make test-e2e-teardown

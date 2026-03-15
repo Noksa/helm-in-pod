@@ -24,7 +24,7 @@ func newRootCmd() *cobra.Command {
 	startTime := time.Now()
 	var debug bool
 	rootCmd.PersistentFlags().BoolVar(&debug, "verbose-logs", false, "Enable debug logs")
-	rootCmd.PersistentFlags().Duration("timeout", time.Second*0, "After timeout a command will be gracefully terminated even if it is still running. Default is 1h")
+	rootCmd.PersistentFlags().Duration("timeout", time.Second*0, "After timeout a command will be gracefully terminated even if it is still running. Default is 2h")
 	_ = viper.BindPFlag("timeout", rootCmd.PersistentFlags().Lookup("timeout"))
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if debug {
