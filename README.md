@@ -4,6 +4,22 @@
 
 ---
 
+## 📑 Table of Contents
+
+- [Why?](#-why)
+- [Requirements](#-requirements)
+- [Installation](#-installation)
+- [Daemon Mode](#-daemon-mode)
+- [Usage](#-usage)
+- [Environment Variables](#-environment-variables)
+- [How It Works](#️-how-it-works)
+- [RBAC / Cluster Resources](#-rbac--cluster-resources)
+- [Examples](#-examples)
+- [Purge](#-purge)
+- [Development](#-development)
+
+---
+
 ## 🤔 Why?
 
 <details>
@@ -117,15 +133,15 @@ helm in-pod exec [FLAGS] -- "COMMAND"
 | Flag              | Description                                                        |
 |-------------------|--------------------------------------------------------------------|
 | `--verbose-logs`  | Enable debug logs                                                  |
-| `--timeout`       | Gracefully terminate command after duration (default: 2h)          |
+| `--timeout`       | Gracefully terminate command after duration (default: 2h at runtime) |
 
-> ⚠️ **Note**: The plugin adds 10 minutes to the specified `--timeout` internally for pod operations (startup, file copy, etc.). For example, `--timeout 2h` results in a total pod lifetime of 2h10m. The extra time ensures the pod stays alive long enough for setup and teardown around your command.
+> ⚠️ **Note**: For `exec` and `daemon start`, the plugin adds 10 minutes to the specified `--timeout` internally for pod operations (startup, file copy, etc.). For example, `--timeout 2h` results in a total pod lifetime of 2h10m. In `daemon exec`, the timeout applies directly to command execution with no additional overhead. See [DAEMON.md](DAEMON.md#️-timeout-behavior) for details.
 
 #### Pod Creation Flags
 
 | Flag                  | Short | Description                                                                  |
 |-----------------------|-------|------------------------------------------------------------------------------|
-| `--image`             | `-i`  | Docker image to use (default: `docker.io/noksa/kubectl-helm:v1.34.5-v4.1.1`) |
+| `--image`             | `-i`  | Docker image to use (run `helm in-pod exec --help` for current default) |
 | `--cpu-request`       |       | Pod's CPU request (default: `1100m`)                                          |
 | `--cpu-limit`         |       | Pod's CPU limit (default: `1100m`)                                            |
 | `--memory-request`    |       | Pod's memory request (default: `500Mi`)                                       |
@@ -416,5 +432,32 @@ helm in-pod purge --all
 
 | Command              | What it removes                                                                 |
 |----------------------|---------------------------------------------------------------------------------|
-| `purge`              | Leftover pods (from the current host) and the `helm-in-pod` ClusterRoleBinding  |
-| `purge --all`        | Everything above **plus** the `helm-in-pod` namespace and all resources within it |
+| `purge`              | Leftover pods (from the current host), associated PDBs, and the `helm-in-pod` ClusterRoleBinding |
+| `purge --all`        | All pods in the `helm-in-pod` namespace (regardless of host), associated PDBs, and the ClusterRoleBinding |
+
+> 💡 `purge --all` does not delete the `helm-in-pod` namespace itself or the ServiceAccount. It removes all pods without filtering by host label.
+
+
+---
+
+## 🛠️ Development
+
+### Requirements
+
+- Go 1.26+
+- [Ginkgo](https://onsi.github.io/ginkgo/) test framework (installed automatically by `make` targets)
+
+### Useful Make Targets
+
+| Target               | Description                                      |
+|----------------------|--------------------------------------------------|
+| `make build`         | Build binary for current platform                |
+| `make test`          | Run unit tests                                   |
+| `make test-verbose`  | Run unit tests with verbose output               |
+| `make test-coverage` | Run tests with coverage report                   |
+| `make lint`          | Run linters and formatters                       |
+| `make tidy`          | Tidy go modules                                  |
+| `make install-local` | Build and install plugin locally for testing      |
+| `make test-e2e-full` | Full e2e flow: setup kind cluster, test, teardown |
+
+Run `make help` for the full list.

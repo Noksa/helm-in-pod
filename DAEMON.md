@@ -188,15 +188,9 @@ helm in-pod daemon stop --name dev
 
 ## 🔐 RBAC / Cluster Resources
 
-Daemon mode uses the same RBAC setup as `exec` mode. On first run, the plugin automatically creates:
+Daemon mode uses the same RBAC setup as `exec` mode. See the [main README](README.md#-rbac--cluster-resources) for the full list of resources created.
 
-| Resource             | Name           | Details                                                        |
-|----------------------|----------------|----------------------------------------------------------------|
-| **Namespace**        | `helm-in-pod`  | Dedicated namespace for all plugin pods                        |
-| **ServiceAccount**   | `helm-in-pod`  | Created in the `helm-in-pod` namespace                         |
-| **ClusterRoleBinding** | `helm-in-pod` | Binds the ServiceAccount to the `cluster-admin` ClusterRole   |
-
-> ⚠️ **Security Note**: Daemon pods run with `cluster-admin` privileges, just like `exec` pods. See the [main README](README.md#-rbac--cluster-resources) for details.
+> ⚠️ **Security Note**: Daemon pods run with `cluster-admin` privileges, just like `exec` pods.
 
 ## 🎛️ Available Flags
 
@@ -247,7 +241,7 @@ Timeout works differently across daemon subcommands:
 
 ## 🔁 Exit Code Propagation
 
-Like `exec`, daemon mode propagates exit codes from executed commands. If the command inside the daemon pod exits with code `N`, `helm in-pod daemon exec` also exits with code `N`. This makes daemon mode safe for CI/CD pipelines.
+Like `exec`, daemon mode propagates exit codes from executed commands. See the [main README](README.md#-exit-code-propagation) for details.
 
 ```bash
 helm in-pod daemon exec --name ci -- "helm upgrade myapp repo/chart"
