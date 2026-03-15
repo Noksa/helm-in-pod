@@ -36,8 +36,8 @@ var _ = Describe("Copy From Pod", func() {
 	})
 
 	Context("exec mode", func() {
-		It("should copy a single file from pod to host", func() {
-			hostPath := filepath.Join(tmpDir, "output")
+		It("should copy a single file from pod to host as a file", func() {
+			hostPath := filepath.Join(tmpDir, "result.txt")
 			cmd := BuildHelmInPodCommand(
 				"--labels", testLabel,
 				"--copy-from", fmt.Sprintf("/tmp/result.txt:%s", hostPath),
@@ -47,12 +47,16 @@ var _ = Describe("Copy From Pod", func() {
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 
-			data, err := os.ReadFile(filepath.Join(hostPath, "result.txt"))
+			info, err := os.Stat(hostPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(info.IsDir()).To(BeFalse(), "expected a file, got a directory")
+
+			data, err := os.ReadFile(hostPath)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(data)).To(ContainSubstring("hello-from-pod"))
 		})
 
-		It("should copy a directory from pod to host", func() {
+		It("should copy a directory contents directly into host path", func() {
 			hostPath := filepath.Join(tmpDir, "outdir")
 			cmd := BuildHelmInPodCommand(
 				"--labels", testLabel,
@@ -63,18 +67,22 @@ var _ = Describe("Copy From Pod", func() {
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 
-			dataA, err := os.ReadFile(filepath.Join(hostPath, "mydir", "a.txt"))
+			// Contents should be directly inside hostPath, not nested under mydir/
+			dataA, err := os.ReadFile(filepath.Join(hostPath, "a.txt"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(dataA)).To(ContainSubstring("file-a"))
 
-			dataB, err := os.ReadFile(filepath.Join(hostPath, "mydir", "b.txt"))
+			dataB, err := os.ReadFile(filepath.Join(hostPath, "b.txt"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(dataB)).To(ContainSubstring("file-b"))
+
+			// The extra nested directory should NOT exist
+			Expect(filepath.Join(hostPath, "mydir")).NotTo(BeADirectory())
 		})
 
 		It("should copy multiple files with multiple --copy-from flags", func() {
-			hostPath1 := filepath.Join(tmpDir, "out1")
-			hostPath2 := filepath.Join(tmpDir, "out2")
+			hostPath1 := filepath.Join(tmpDir, "f1.txt")
+			hostPath2 := filepath.Join(tmpDir, "f2.txt")
 			cmd := BuildHelmInPodCommand(
 				"--labels", testLabel,
 				"--copy-from", fmt.Sprintf("/tmp/f1.txt:%s", hostPath1),
@@ -85,17 +93,17 @@ var _ = Describe("Copy From Pod", func() {
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 
-			data1, err := os.ReadFile(filepath.Join(hostPath1, "f1.txt"))
+			data1, err := os.ReadFile(hostPath1)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(data1)).To(ContainSubstring("first"))
 
-			data2, err := os.ReadFile(filepath.Join(hostPath2, "f2.txt"))
+			data2, err := os.ReadFile(hostPath2)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(data2)).To(ContainSubstring("second"))
 		})
 
 		It("should still copy files even when command fails", func() {
-			hostPath := filepath.Join(tmpDir, "failout")
+			hostPath := filepath.Join(tmpDir, "artifact.txt")
 			cmd := BuildHelmInPodCommand(
 				"--labels", testLabel,
 				"--copy-from", fmt.Sprintf("/tmp/artifact.txt:%s", hostPath),
@@ -107,9 +115,96 @@ var _ = Describe("Copy From Pod", func() {
 			Expect(exitCode).NotTo(Equal(0), "output: %s", output)
 
 			// But the file should still be copied
-			data, err := os.ReadFile(filepath.Join(hostPath, "artifact.txt"))
+			data, err := os.ReadFile(hostPath)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(data)).To(ContainSubstring("artifact-data"))
+		})
+
+		It("should copy a file with a different destination name", func() {
+			hostPath := filepath.Join(tmpDir, "renamed-output.txt")
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--copy-from", fmt.Sprintf("/tmp/original.txt:%s", hostPath),
+				"--",
+				"sh -c 'echo renamed-content > /tmp/original.txt'",
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+
+			data, err := os.ReadFile(hostPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(data)).To(ContainSubstring("renamed-content"))
+		})
+
+		It("should copy a nested directory without extra nesting", func() {
+			hostPath := filepath.Join(tmpDir, "nested", "dest")
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--copy-from", fmt.Sprintf("/tmp/srcdir:%s", hostPath),
+				"--",
+				"sh -c 'mkdir -p /tmp/srcdir/sub && echo deep > /tmp/srcdir/sub/deep.txt'",
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+
+			data, err := os.ReadFile(filepath.Join(hostPath, "sub", "deep.txt"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(data)).To(ContainSubstring("deep"))
+
+			// Should NOT have extra srcdir/ level
+			Expect(filepath.Join(hostPath, "srcdir")).NotTo(BeADirectory())
+		})
+
+		It("should copy a file into an existing directory when hostPath is a dir", func() {
+			// Pre-create the target directory
+			destDir := filepath.Join(tmpDir, "existing-dir")
+			Expect(os.MkdirAll(destDir, 0o755)).To(Succeed())
+
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--copy-from", fmt.Sprintf("/tmp/into-dir.txt:%s", destDir),
+				"--",
+				"sh -c 'echo into-dir-content > /tmp/into-dir.txt'",
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+
+			// File should be placed inside the directory with its original name
+			data, err := os.ReadFile(filepath.Join(destDir, "into-dir.txt"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(data)).To(ContainSubstring("into-dir-content"))
+		})
+
+		It("should copy a directory into current dir with dot host path", func() {
+			// Use tmpDir as working directory equivalent
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--copy-from", fmt.Sprintf("/tmp/dotdir:%s", tmpDir),
+				"--",
+				"sh -c 'mkdir -p /tmp/dotdir && echo dot-content > /tmp/dotdir/dot.txt'",
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+
+			data, err := os.ReadFile(filepath.Join(tmpDir, "dot.txt"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(data)).To(ContainSubstring("dot-content"))
+		})
+
+		It("should copy a file to a deep non-existent path", func() {
+			hostPath := filepath.Join(tmpDir, "a", "b", "c", "result.txt")
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--copy-from", fmt.Sprintf("/tmp/deep.txt:%s", hostPath),
+				"--",
+				"sh -c 'echo deep-file > /tmp/deep.txt'",
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+
+			data, err := os.ReadFile(hostPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(data)).To(ContainSubstring("deep-file"))
 		})
 	})
 
@@ -129,7 +224,7 @@ var _ = Describe("Copy From Pod", func() {
 		})
 
 		It("should copy file from daemon pod to host", func() {
-			hostPath := filepath.Join(tmpDir, "daemon-out")
+			hostPath := filepath.Join(tmpDir, "daemon-result.txt")
 			cmd := exec.Command("helm", "in-pod", "daemon", "exec",
 				"--name", daemonName,
 				"-n", testNS,
@@ -138,7 +233,7 @@ var _ = Describe("Copy From Pod", func() {
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 
-			data, err := os.ReadFile(filepath.Join(hostPath, "daemon-result.txt"))
+			data, err := os.ReadFile(hostPath)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(data)).To(ContainSubstring("daemon-output"))
 		})

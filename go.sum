@@ -44,8 +44,8 @@ github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ
 github.com/MakeNowJust/heredoc v1.0.0/go.mod h1:mG5amYoWBHf8vpLOuehzbGGw0EHxpZZ6lCpQ4fNJ8LE=
 github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=
 github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
-github.com/Noksa/operator-home v0.18.5-0.20260314135044-3d5e5c2a5c3f h1:4ylC94AY2uXEOoGyylTUhMu69rHV8qA582Z3t8sJelY=
-github.com/Noksa/operator-home v0.18.5-0.20260314135044-3d5e5c2a5c3f/go.mod h1:RTXyqvqYJo+kHJ6GagKYRBpx2mm3jEqsiypPT2B6V98=
+github.com/Noksa/operator-home v0.18.5-0.20260315163707-6bbd75fa2b1b h1:9LzkDes2mee/yIRNcf5gO5Or737FEgSbXwuQ0h4Cl8g=
+github.com/Noksa/operator-home v0.18.5-0.20260315163707-6bbd75fa2b1b/go.mod h1:RTXyqvqYJo+kHJ6GagKYRBpx2mm3jEqsiypPT2B6V98=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=

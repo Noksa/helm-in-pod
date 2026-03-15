@@ -19,7 +19,7 @@ func main() {
 		TimeFormat:    "15:04:05.000",
 		PartsOrder:    []string{"time", "level", "message", "source"},
 		FieldsExclude: []string{"source"},
-		FormatPartValueByName: func(i interface{}, name string) string {
+		FormatPartValueByName: func(i any, name string) string {
 			if name != "source" {
 				return fmt.Sprintf("%s", i)
 			}

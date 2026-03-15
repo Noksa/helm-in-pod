@@ -27,8 +27,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 )
@@ -161,7 +159,7 @@ func (m *Manager) waitUntilPodIsRunning(pod *corev1.Pod) error {
 	start := time.Now()
 
 	for time.Since(start) <= timeout {
-		stdout, stderr, err := m.client().RunCommandInPod("[ -f /tmp/ready ] && echo ready", Namespace, pod.Name, pod.Namespace, nil)
+		stdout, stderr, err := m.client().ExecInPod("[ -f /tmp/ready ] && echo ready", Namespace, pod.Name, pod.Namespace)
 		if err == nil && strings.Contains(stdout, "ready") {
 			logz.Host().Debug().Msgf("%v pod is ready", color.CyanString(pod.Name))
 			return nil
@@ -217,93 +215,105 @@ func (m *Manager) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string
 	}
 
 	dir := filepath.Dir(destPath)
-	req := m.client().ClientSet().CoreV1().RESTClient().Post().
-		Resource("pods").
-		Name(pod.Name).
-		Namespace(pod.Namespace).
-		SubResource("exec").
-		Param("container", Namespace)
-
-	req.VersionedParams(&corev1.PodExecOptions{
-		Container: Namespace,
-		Command: []string{"sh", "-ceu", fmt.Sprintf(`
-mkdir -p %v
-tar zxf - -C /`, dir)},
-		Stdin:  true,
-		Stdout: true,
-		Stderr: true,
-	}, scheme.ParameterCodec)
+	cmd := fmt.Sprintf("mkdir -p %s && tar zxf - -C /", dir)
 
 	return hipretry.Retry(attempts, func() error {
-		exec, err := remotecommand.NewSPDYExecutor(m.client().Config(), "POST", req.URL())
+		logz.HostPod().Info().Msgf("Copying %v to %v", color.CyanString(srcPath), color.MagentaString(destPath))
+
+		_, stderr, err := m.client().ExecInPod(cmd, Namespace, pod.Name, pod.Namespace,
+			operatorkclient.WithContext(m.ctx),
+			operatorkclient.WithTimeout(time.Minute*10),
+			operatorkclient.WithStdin(bytes.NewReader(buffer.Bytes())),
+		)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: %s", err, stderr)
 		}
 
-		logz.HostPod().Info().Msgf("Copying %v to %v", color.CyanString(srcPath), color.MagentaString(destPath))
-		b := &strings.Builder{}
-		err = exec.StreamWithContext(m.ctx, remotecommand.StreamOptions{
-			Stdin:  bytes.NewReader(buffer.Bytes()),
-			Stdout: b,
-			Stderr: b,
-			Tty:    false,
-		})
-		if err != nil {
-			return fmt.Errorf("%w: %s", err, b.String())
-		}
 		logz.HostPod().Debug().Msgf("%v has been copied to %v", color.CyanString(srcPath), color.MagentaString(destPath))
 		return nil
 	})
 }
 
-// CopyFileFromPod copies a file or directory from the pod to the local host.
-// It streams a tar archive from the pod and extracts it locally.
+// isPodPathRegularFile checks whether podPath is a regular file inside the pod.
+func (m *Manager) isPodPathRegularFile(pod *corev1.Pod, podPath string) bool {
+	cmd := fmt.Sprintf("test -f %s", podPath)
+	_, _, err := m.client().ExecInPod(cmd, Namespace, pod.Name, pod.Namespace,
+		operatorkclient.WithRawCommand(true))
+	return err == nil
+}
+
+// CopyFileFromPod copies a file or directory from the pod to the host.
+//
+// For regular files:
+//   - If hostPath is "." or an existing directory, the file is placed inside it
+//     keeping its original name (like cp).
+//   - Otherwise hostPath is treated as the destination file path.
+//
+// For directories, the contents are placed directly inside hostPath.
 func (m *Manager) CopyFileFromPod(pod *corev1.Pod, podPath string, hostPath string, attempts int) error {
 	podPath = filepath.Clean(podPath)
 	hostPath = filepath.Clean(hostPath)
 
 	return hipretry.Retry(attempts, func() error {
-		req := m.client().ClientSet().CoreV1().RESTClient().Post().
-			Resource("pods").
-			Name(pod.Name).
-			Namespace(pod.Namespace).
-			SubResource("exec").
-			Param("container", Namespace)
+		isFile := m.isPodPathRegularFile(pod, podPath)
 
-		req.VersionedParams(&corev1.PodExecOptions{
-			Container: Namespace,
-			Command:   []string{"tar", "czf", "-", "-C", filepath.Dir(podPath), filepath.Base(podPath)},
-			Stdin:     false,
-			Stdout:    true,
-			Stderr:    true,
-		}, scheme.ParameterCodec)
+		var tarCmd string
+		var extractDir string
 
-		exec, err := remotecommand.NewSPDYExecutor(m.client().Config(), "POST", req.URL())
-		if err != nil {
-			return err
+		if isFile {
+			// Determine whether hostPath is a directory target or a file target.
+			hostIsDir := hostPath == "." || isLocalDir(hostPath)
+			if hostIsDir {
+				// Place file inside the directory, keeping its original name.
+				tarCmd = fmt.Sprintf("tar czf - -C %s %s", filepath.Dir(podPath), filepath.Base(podPath))
+				extractDir = hostPath
+			} else {
+				// hostPath is the target file path.
+				tarCmd = fmt.Sprintf("tar czf - -C %s %s", filepath.Dir(podPath), filepath.Base(podPath))
+				extractDir = filepath.Dir(hostPath)
+			}
+		} else {
+			tarCmd = fmt.Sprintf("tar czf - -C %s .", podPath)
+			extractDir = hostPath
 		}
 
 		logz.HostPod().Info().Msgf("Copying %v to %v", color.MagentaString(podPath), color.CyanString(hostPath))
 
 		var stdout bytes.Buffer
-		errBuf := &strings.Builder{}
-		err = exec.StreamWithContext(m.ctx, remotecommand.StreamOptions{
-			Stdout: &stdout,
-			Stderr: errBuf,
-			Tty:    false,
-		})
+		_, _, err := m.client().ExecInPod(tarCmd, Namespace, pod.Name, pod.Namespace,
+			operatorkclient.WithContext(m.ctx),
+			operatorkclient.WithTimeout(time.Minute*10),
+			operatorkclient.WithRawCommand(true),
+			operatorkclient.WithStdout(&stdout),
+		)
 		if err != nil {
-			return fmt.Errorf("%w: %s", err, errBuf.String())
+			return err
 		}
 
-		// Extract the tar.gz archive to the host path
-		if err := extractTarGz(&stdout, hostPath); err != nil {
+		if err := extractTarGz(&stdout, extractDir); err != nil {
 			return fmt.Errorf("failed to extract archive: %w", err)
+		}
+
+		// For file targets (not directory targets), rename if the pod filename
+		// differs from the desired host filename.
+		if isFile && !isLocalDir(hostPath) && hostPath != "." {
+			if filepath.Base(podPath) != filepath.Base(hostPath) {
+				extracted := filepath.Join(extractDir, filepath.Base(podPath))
+				if renameErr := os.Rename(extracted, hostPath); renameErr != nil {
+					return fmt.Errorf("failed to rename extracted file: %w", renameErr)
+				}
+			}
 		}
 
 		logz.HostPod().Debug().Msgf("%v has been copied to %v", color.MagentaString(podPath), color.CyanString(hostPath))
 		return nil
 	})
+}
+
+// isLocalDir returns true if path exists and is a directory on the local filesystem.
+func isLocalDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 // extractTarGz extracts a gzipped tar archive from r into destDir.
@@ -500,26 +510,6 @@ func (m *Manager) AnnotatePod(pod *corev1.Pod, annotations map[string]string) er
 }
 
 func (m *Manager) OpenInteractiveShell(ctx context.Context, pod *corev1.Pod, shell string) error {
-	req := m.client().ClientSet().CoreV1().RESTClient().Post().
-		Resource("pods").
-		Name(pod.Name).
-		Namespace(pod.Namespace).
-		SubResource("exec")
-
-	req.VersionedParams(&corev1.PodExecOptions{
-		Container: Namespace,
-		Command:   []string{shell},
-		Stdin:     true,
-		Stdout:    true,
-		Stderr:    true,
-		TTY:       true,
-	}, scheme.ParameterCodec)
-
-	exec, err := remotecommand.NewSPDYExecutor(m.client().Config(), "POST", req.URL())
-	if err != nil {
-		return err
-	}
-
 	// Set up terminal for raw mode
 	oldState, err := setupTerminal()
 	if err != nil {
@@ -529,12 +519,15 @@ func (m *Manager) OpenInteractiveShell(ctx context.Context, pod *corev1.Pod, she
 		_ = restoreTerminal(oldState)
 	}()
 
-	return exec.StreamWithContext(ctx, remotecommand.StreamOptions{
-		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-		Tty:    true,
-	})
+	_, _, err = m.client().ExecInPod(shell, Namespace, pod.Name, pod.Namespace,
+		operatorkclient.WithContext(ctx),
+		operatorkclient.WithTTY(true),
+		operatorkclient.WithRawCommand(true),
+		operatorkclient.WithStdin(os.Stdin),
+		operatorkclient.WithStdout(os.Stdout),
+		operatorkclient.WithStderr(os.Stderr),
+	)
+	return err
 }
 
 // PrintPodSpecYAML builds the pod spec and prints it as YAML without creating anything.
