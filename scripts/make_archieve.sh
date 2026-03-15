@@ -17,11 +17,17 @@ if command -v gtar &>/dev/null; then
   TAR="gtar"
 fi
 
-ARCH="amd64 arm64"
-OS="linux darwin windows"
+ALL_ARCH="amd64 arm64"
+ALL_OS="linux darwin windows"
 
-for A in $ARCH; do
-  for O in $OS; do
+# Support TARGET variable to build a single platform (e.g., TARGET=linux/amd64)
+if [ -n "${TARGET:-}" ]; then
+  IFS='/' read -r ALL_OS ALL_ARCH <<< "$TARGET"
+  cyber_log "Target: ${CYBER_C}${TARGET}${CYBER_X}"
+fi
+
+for A in $ALL_ARCH; do
+  for O in $ALL_OS; do
     output="in-pod"
     if [[ "$O" == "windows" ]]; then
       output="in-pod.exe"

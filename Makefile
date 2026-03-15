@@ -155,8 +155,8 @@ build: $(CYBER_CACHE) ## Build binary for current platform
 	@source $(CYBER_CACHE) && cyber_ok "Binary: $${CYBER_G}bin/in-pod$${CYBER_X}"
 
 .PHONY: binaries
-binaries: ## Build release binaries for all platforms
-	@./scripts/make_archieve.sh
+binaries: ## Build release binaries for all platforms (use TARGET=os/arch for single platform)
+	@TARGET="$(TARGET)" ./scripts/make_archieve.sh
 
 ##@ Cleanup
 
