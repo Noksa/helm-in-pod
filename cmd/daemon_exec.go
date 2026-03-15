@@ -92,7 +92,29 @@ func newDaemonExecCmd() *cobra.Command {
 			if timeout == 0 {
 				timeout = time.Hour * 2
 			}
-			return internal.Pod().ExecuteCommandInDaemon(cmd.Context(), pod, cmdToUse, homeDirectory, timeout, opts.ExecOptions)
+			execErr := internal.Pod().ExecuteCommandInDaemon(cmd.Context(), pod, cmdToUse, homeDirectory, timeout, opts.ExecOptions)
+
+			// Copy files from pod to host after command execution
+			if len(opts.CopyFrom) > 0 {
+				copyFromMap, parseErr := parseCopyFromMappings(opts.CopyFrom)
+				if parseErr != nil {
+					if execErr != nil {
+						return execErr
+					}
+					return parseErr
+				}
+				for podPath, hostPath := range copyFromMap {
+					expanded, expandErr := expand(hostPath)
+					if expandErr != nil {
+						return expandErr
+					}
+					if copyErr := internal.Pod().CopyFileFromPod(pod, podPath, expanded, opts.CopyAttempts); copyErr != nil {
+						return copyErr
+					}
+				}
+			}
+
+			return execErr
 		},
 	}
 	execCmd.Flags().StringVar(&opts.Name, "name", "", "Daemon name (required)")

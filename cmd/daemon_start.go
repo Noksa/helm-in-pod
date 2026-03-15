@@ -45,6 +45,11 @@ func newDaemonStartCmd() *cobra.Command {
 			}
 			opts.Labels["daemon"] = opts.Name
 
+			// Handle dry-run: print pod spec and exit
+			if opts.DryRun {
+				return internal.Pod().PrintPodSpecYAML(opts.ExecOptions, true)
+			}
+
 			if len(opts.Files) > 0 {
 				opts.FilesAsMap = map[string]string{}
 				for _, val := range opts.Files {

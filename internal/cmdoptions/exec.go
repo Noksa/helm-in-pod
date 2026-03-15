@@ -32,4 +32,8 @@ type ExecOptions struct {
 	Timeout            time.Duration
 	CopyAttempts       int
 	UpdateRepoAttempts int
+	Volumes            []string
+	ServiceAccount     string
+	DryRun             bool
+	CopyFrom           []string
 }

@@ -36,7 +36,7 @@ var _ = Describe("buildPodSpec", func() {
 				"FOO": "bar",
 				"BAZ": "qux",
 			}
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			envNames := envVarNames(spec.Containers[0].Env)
@@ -48,7 +48,7 @@ var _ = Describe("buildPodSpec", func() {
 		It("should substitute env vars from --subst-env using host environment", func() {
 			opts := baseOpts()
 			opts.SubstEnv = []string{"PATH"}
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			envNames := envVarNames(spec.Containers[0].Env)
@@ -58,7 +58,7 @@ var _ = Describe("buildPodSpec", func() {
 		It("should always include TIMEOUT env var", func() {
 			opts := baseOpts()
 			opts.Timeout = 30 * time.Minute
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(findEnvVar(spec.Containers[0].Env, "TIMEOUT")).To(Equal("1800"))
@@ -66,7 +66,7 @@ var _ = Describe("buildPodSpec", func() {
 
 		It("should handle empty env maps", func() {
 			opts := baseOpts()
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Only TIMEOUT should be present
@@ -78,7 +78,7 @@ var _ = Describe("buildPodSpec", func() {
 			opts := baseOpts()
 			opts.Env = map[string]string{"MY_VAR": "hello"}
 			opts.SubstEnv = []string{"HOME"}
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			envNames := envVarNames(spec.Containers[0].Env)
@@ -89,7 +89,7 @@ var _ = Describe("buildPodSpec", func() {
 	Context("resource requests and limits", func() {
 		It("should set CPU and memory requests and limits", func() {
 			opts := baseOpts()
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			res := spec.Containers[0].Resources
@@ -103,7 +103,7 @@ var _ = Describe("buildPodSpec", func() {
 			opts := baseOpts()
 			opts.CpuLimit = ""
 			opts.MemoryLimit = ""
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			res := spec.Containers[0].Resources
@@ -119,7 +119,7 @@ var _ = Describe("buildPodSpec", func() {
 			opts := baseOpts()
 			opts.CpuRequest = ""
 			opts.MemoryRequest = ""
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			res := spec.Containers[0].Resources
@@ -137,7 +137,7 @@ var _ = Describe("buildPodSpec", func() {
 			opts.CpuLimit = ""
 			opts.MemoryRequest = ""
 			opts.MemoryLimit = ""
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			res := spec.Containers[0].Resources
@@ -151,7 +151,7 @@ var _ = Describe("buildPodSpec", func() {
 			opts.CpuLimit = "0"
 			opts.MemoryRequest = "0"
 			opts.MemoryLimit = "0"
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			res := spec.Containers[0].Resources
@@ -165,7 +165,7 @@ var _ = Describe("buildPodSpec", func() {
 			opts.CpuLimit = "0"
 			opts.MemoryRequest = "64Mi"
 			opts.MemoryLimit = "0"
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			res := spec.Containers[0].Resources
@@ -183,7 +183,7 @@ var _ = Describe("buildPodSpec", func() {
 			opts.CpuLimit = "500m"
 			opts.MemoryRequest = "0"
 			opts.MemoryLimit = "256Mi"
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			res := spec.Containers[0].Resources
@@ -201,7 +201,7 @@ var _ = Describe("buildPodSpec", func() {
 			opts.CpuLimit = "4000m"
 			opts.MemoryRequest = "1Gi"
 			opts.MemoryLimit = "2Gi"
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			res := spec.Containers[0].Resources
@@ -216,7 +216,7 @@ var _ = Describe("buildPodSpec", func() {
 		It("should set RunAsUser when specified", func() {
 			opts := baseOpts()
 			opts.RunAsUser = 1000
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			sc := spec.Containers[0].SecurityContext
@@ -227,7 +227,7 @@ var _ = Describe("buildPodSpec", func() {
 		It("should set RunAsGroup when specified", func() {
 			opts := baseOpts()
 			opts.RunAsGroup = 2000
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			sc := spec.Containers[0].SecurityContext
@@ -239,7 +239,7 @@ var _ = Describe("buildPodSpec", func() {
 			opts := baseOpts()
 			opts.RunAsUser = 1000
 			opts.RunAsGroup = 1000
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			sc := spec.Containers[0].SecurityContext
@@ -249,7 +249,7 @@ var _ = Describe("buildPodSpec", func() {
 
 		It("should not set RunAsUser when -1 (default)", func() {
 			opts := baseOpts()
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			sc := spec.Containers[0].SecurityContext
@@ -258,7 +258,7 @@ var _ = Describe("buildPodSpec", func() {
 
 		It("should not set RunAsGroup when -1 (default)", func() {
 			opts := baseOpts()
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			sc := spec.Containers[0].SecurityContext
@@ -268,7 +268,7 @@ var _ = Describe("buildPodSpec", func() {
 		It("should handle RunAsUser=0 (root)", func() {
 			opts := baseOpts()
 			opts.RunAsUser = 0
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			sc := spec.Containers[0].SecurityContext
@@ -281,7 +281,7 @@ var _ = Describe("buildPodSpec", func() {
 		It("should set the image", func() {
 			opts := baseOpts()
 			opts.Image = "custom-image:v1.0"
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.Containers[0].Image).To(Equal("custom-image:v1.0"))
@@ -290,7 +290,7 @@ var _ = Describe("buildPodSpec", func() {
 		It("should set the pull policy", func() {
 			opts := baseOpts()
 			opts.PullPolicy = "Always"
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.Containers[0].ImagePullPolicy).To(Equal(corev1.PullAlways))
@@ -299,7 +299,7 @@ var _ = Describe("buildPodSpec", func() {
 		It("should set image pull secret when specified", func() {
 			opts := baseOpts()
 			opts.ImagePullSecret = "my-registry-secret"
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.ImagePullSecrets).To(HaveLen(1))
@@ -308,7 +308,7 @@ var _ = Describe("buildPodSpec", func() {
 
 		It("should not set image pull secrets when empty", func() {
 			opts := baseOpts()
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.ImagePullSecrets).To(BeNil())
@@ -319,7 +319,7 @@ var _ = Describe("buildPodSpec", func() {
 		It("should parse single toleration", func() {
 			opts := baseOpts()
 			opts.Tolerations = []string{"dedicated=gpu:NoSchedule:Equal"}
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.Tolerations).To(HaveLen(1))
@@ -335,7 +335,7 @@ var _ = Describe("buildPodSpec", func() {
 				"::Exists",
 				"node.kubernetes.io/not-ready=:NoExecute:Exists",
 			}
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.Tolerations).To(HaveLen(2))
@@ -347,7 +347,7 @@ var _ = Describe("buildPodSpec", func() {
 				"::Exists",
 				"::Exists",
 			}
-			_, err := buildPodSpec(opts)
+			_, err := buildPodSpec(opts, false)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("duplicate toleration"))
 		})
@@ -355,14 +355,14 @@ var _ = Describe("buildPodSpec", func() {
 		It("should reject invalid toleration format", func() {
 			opts := baseOpts()
 			opts.Tolerations = []string{"invalid"}
-			_, err := buildPodSpec(opts)
+			_, err := buildPodSpec(opts, false)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("invalid toleration"))
 		})
 
 		It("should have no tolerations when none specified", func() {
 			opts := baseOpts()
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.Tolerations).To(BeNil())
@@ -376,7 +376,7 @@ var _ = Describe("buildPodSpec", func() {
 				"disktype":    "ssd",
 				"environment": "production",
 			}
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.NodeSelector).To(HaveKeyWithValue("disktype", "ssd"))
@@ -388,7 +388,7 @@ var _ = Describe("buildPodSpec", func() {
 			opts.NodeSelector = map[string]string{
 				"node-role.kubernetes.io/control-plane": "",
 			}
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.NodeSelector).To(HaveKeyWithValue("node-role.kubernetes.io/control-plane", ""))
@@ -397,7 +397,7 @@ var _ = Describe("buildPodSpec", func() {
 		It("should not set node selector when empty", func() {
 			opts := baseOpts()
 			opts.NodeSelector = map[string]string{}
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.NodeSelector).To(BeNil())
@@ -408,7 +408,7 @@ var _ = Describe("buildPodSpec", func() {
 		It("should enable host network when specified", func() {
 			opts := baseOpts()
 			opts.HostNetwork = true
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.HostNetwork).To(BeTrue())
@@ -416,17 +416,83 @@ var _ = Describe("buildPodSpec", func() {
 
 		It("should not enable host network by default", func() {
 			opts := baseOpts()
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.HostNetwork).To(BeFalse())
 		})
 	})
 
+	Context("volumes", func() {
+		It("should add volumes and volume mounts from --volume flag", func() {
+			opts := baseOpts()
+			opts.Volumes = []string{"pvc:my-claim:/data", "secret:my-secret:/etc/creds:ro"}
+			spec, err := buildPodSpec(opts, false)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(spec.Volumes).To(HaveLen(2))
+			Expect(spec.Volumes[0].PersistentVolumeClaim).NotTo(BeNil())
+			Expect(spec.Volumes[0].PersistentVolumeClaim.ClaimName).To(Equal("my-claim"))
+			Expect(spec.Volumes[1].Secret).NotTo(BeNil())
+			Expect(spec.Volumes[1].Secret.SecretName).To(Equal("my-secret"))
+
+			Expect(spec.Containers[0].VolumeMounts).To(HaveLen(2))
+			Expect(spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/data"))
+			Expect(spec.Containers[0].VolumeMounts[0].ReadOnly).To(BeFalse())
+			Expect(spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/etc/creds"))
+			Expect(spec.Containers[0].VolumeMounts[1].ReadOnly).To(BeTrue())
+		})
+
+		It("should have no volumes when none specified", func() {
+			opts := baseOpts()
+			spec, err := buildPodSpec(opts, false)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(spec.Volumes).To(BeNil())
+			Expect(spec.Containers[0].VolumeMounts).To(BeNil())
+		})
+
+		It("should return error for invalid volume format", func() {
+			opts := baseOpts()
+			opts.Volumes = []string{"invalid"}
+			_, err := buildPodSpec(opts, false)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid volume"))
+		})
+
+		It("should return error for unsupported volume type", func() {
+			opts := baseOpts()
+			opts.Volumes = []string{"nfs:server:/data"}
+			_, err := buildPodSpec(opts, false)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("unsupported volume type"))
+		})
+	})
+
+	Context("service account", func() {
+		It("should use custom service account when specified", func() {
+			opts := baseOpts()
+			opts.ServiceAccount = "my-custom-sa"
+			spec, err := buildPodSpec(opts, false)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(spec.ServiceAccountName).To(Equal("my-custom-sa"))
+		})
+
+		It("should default to Namespace when service account is empty", func() {
+			opts := baseOpts()
+			opts.ServiceAccount = ""
+			spec, err := buildPodSpec(opts, false)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(spec.ServiceAccountName).To(Equal(Namespace))
+		})
+	})
+
 	Context("pod defaults", func() {
 		It("should set restart policy to Never", func() {
 			opts := baseOpts()
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.RestartPolicy).To(Equal(corev1.RestartPolicyNever))
@@ -434,7 +500,7 @@ var _ = Describe("buildPodSpec", func() {
 
 		It("should set service account name", func() {
 			opts := baseOpts()
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.ServiceAccountName).To(Equal(Namespace))
@@ -442,7 +508,7 @@ var _ = Describe("buildPodSpec", func() {
 
 		It("should enable automount service account token", func() {
 			opts := baseOpts()
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.AutomountServiceAccountToken).NotTo(BeNil())
@@ -451,7 +517,7 @@ var _ = Describe("buildPodSpec", func() {
 
 		It("should set termination grace period to 300s", func() {
 			opts := baseOpts()
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.TerminationGracePeriodSeconds).NotTo(BeNil())
@@ -460,7 +526,7 @@ var _ = Describe("buildPodSpec", func() {
 
 		It("should have a startup probe", func() {
 			opts := baseOpts()
-			spec, err := buildPodSpec(opts)
+			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			probe := spec.Containers[0].StartupProbe
@@ -541,6 +607,25 @@ var _ = Describe("buildDaemonPodSpec", func() {
 		opts.Tolerations = []string{"invalid"}
 		_, err := buildDaemonPodSpec(opts)
 		Expect(err).To(HaveOccurred())
+	})
+
+	It("should preserve volumes from exec options", func() {
+		opts := baseOpts()
+		opts.Volumes = []string{"pvc:my-claim:/data"}
+		spec, err := buildDaemonPodSpec(opts)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(spec.Volumes).To(HaveLen(1))
+		Expect(spec.Containers[0].VolumeMounts).To(HaveLen(1))
+	})
+
+	It("should preserve service account from exec options", func() {
+		opts := baseOpts()
+		opts.ServiceAccount = "custom-sa"
+		spec, err := buildDaemonPodSpec(opts)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(spec.ServiceAccountName).To(Equal("custom-sa"))
 	})
 })
 

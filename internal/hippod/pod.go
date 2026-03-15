@@ -1,9 +1,12 @@
 package hippod
 
 import (
+	"archive/tar"
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"maps"
@@ -28,6 +31,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 )
 
 const Namespace = "helm-in-pod"
@@ -90,7 +94,7 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	}
 	log.Infof("%v Creating '%v' pod", logz.LogHost(), Namespace)
 
-	podSpec, err := buildPodSpec(opts)
+	podSpec, err := buildPodSpec(opts, false)
 	if err != nil {
 		return nil, err
 	}
@@ -252,6 +256,104 @@ tar zxf - -C /`, dir)},
 		log.Debugf("%v %v %v has been copied to %v", logz.LogHost(), logz.LogPod(), color.CyanString(srcPath), color.MagentaString(destPath))
 		return nil
 	})
+}
+
+// CopyFileFromPod copies a file or directory from the pod to the local host.
+// It streams a tar archive from the pod and extracts it locally.
+func (m *Manager) CopyFileFromPod(pod *corev1.Pod, podPath string, hostPath string, attempts int) error {
+	podPath = filepath.Clean(podPath)
+	hostPath = filepath.Clean(hostPath)
+
+	return hipretry.Retry(attempts, func() error {
+		req := m.client().ClientSet().CoreV1().RESTClient().Post().
+			Resource("pods").
+			Name(pod.Name).
+			Namespace(pod.Namespace).
+			SubResource("exec").
+			Param("container", Namespace)
+
+		req.VersionedParams(&corev1.PodExecOptions{
+			Container: Namespace,
+			Command:   []string{"tar", "czf", "-", "-C", filepath.Dir(podPath), filepath.Base(podPath)},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    true,
+		}, scheme.ParameterCodec)
+
+		exec, err := remotecommand.NewSPDYExecutor(m.client().Config(), "POST", req.URL())
+		if err != nil {
+			return err
+		}
+
+		log.Infof("%v %v Copying %v to %v", logz.LogHost(), logz.LogPod(), color.MagentaString(podPath), color.CyanString(hostPath))
+
+		var stdout bytes.Buffer
+		errBuf := &strings.Builder{}
+		err = exec.StreamWithContext(m.ctx, remotecommand.StreamOptions{
+			Stdout: &stdout,
+			Stderr: errBuf,
+			Tty:    false,
+		})
+		if err != nil {
+			return multierr.Append(err, fmt.Errorf("%s", errBuf.String()))
+		}
+
+		// Extract the tar.gz archive to the host path
+		if err := extractTarGz(&stdout, hostPath); err != nil {
+			return fmt.Errorf("failed to extract archive: %w", err)
+		}
+
+		log.Debugf("%v %v %v has been copied to %v", logz.LogHost(), logz.LogPod(), color.MagentaString(podPath), color.CyanString(hostPath))
+		return nil
+	})
+}
+
+// extractTarGz extracts a gzipped tar archive from r into destDir.
+func extractTarGz(r io.Reader, destDir string) error {
+	gz, err := gzip.NewReader(r)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = gz.Close() }()
+
+	tr := tar.NewReader(gz)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		target := filepath.Join(destDir, filepath.Clean(header.Name))
+
+		// Prevent path traversal
+		if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(destDir)) {
+			return fmt.Errorf("invalid tar entry path: %s", header.Name)
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return err
+			}
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(f, tr); err != nil {
+				_ = f.Close()
+				return err
+			}
+			_ = f.Close()
+		}
+	}
+	return nil
 }
 
 func (m *Manager) StreamLogsFromPod(ctx context.Context, pod *corev1.Pod, writer io.Writer, since time.Time) error {
@@ -435,4 +537,117 @@ func (m *Manager) OpenInteractiveShell(ctx context.Context, pod *corev1.Pod, she
 		Stderr: os.Stderr,
 		Tty:    true,
 	})
+}
+
+// PrintPodSpecYAML builds the pod spec and prints it as YAML without creating anything.
+func (m *Manager) PrintPodSpecYAML(opts cmdoptions.ExecOptions, isDaemon bool) error {
+	var podSpec corev1.PodSpec
+	var err error
+	if isDaemon {
+		podSpec, err = buildDaemonPodSpec(opts)
+	} else {
+		podSpec, err = buildPodSpec(opts, false)
+	}
+	if err != nil {
+		return err
+	}
+
+	pod := corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Pod",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: fmt.Sprintf("%v-", Namespace),
+			Namespace:    Namespace,
+			Labels: map[string]string{
+				"host": m.myHostname,
+			},
+			Annotations: maps.Clone(opts.Annotations),
+		},
+		Spec: podSpec,
+	}
+	maps.Copy(pod.Labels, opts.Labels)
+
+	data, err := json.Marshal(pod)
+	if err != nil {
+		return fmt.Errorf("failed to marshal pod spec: %w", err)
+	}
+	yamlData, err := yaml.JSONToYAML(data)
+	if err != nil {
+		return fmt.Errorf("failed to convert to YAML: %w", err)
+	}
+
+	fmt.Println("---")
+	fmt.Print(string(yamlData))
+	return nil
+}
+
+// DaemonInfo holds information about a daemon pod for display.
+type DaemonInfo struct {
+	Name      string
+	PodName   string
+	Phase     corev1.PodPhase
+	Node      string
+	Age       time.Duration
+	Image     string
+	HelmFound bool
+	IsHelm4   bool
+	HomeDir   string
+}
+
+// ListDaemonPods returns information about all daemon pods in the namespace.
+func (m *Manager) ListDaemonPods() ([]DaemonInfo, error) {
+	pods, err := m.client().ClientSet().CoreV1().Pods(Namespace).List(m.ctx, metav1.ListOptions{
+		LabelSelector: "daemon",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var infos []DaemonInfo
+	for _, pod := range pods.Items {
+		daemonName := pod.Labels["daemon"]
+		if daemonName == "" {
+			continue
+		}
+		info := DaemonInfo{
+			Name:    daemonName,
+			PodName: pod.Name,
+			Phase:   pod.Status.Phase,
+			Node:    pod.Spec.NodeName,
+			Image:   pod.Spec.Containers[0].Image,
+		}
+		if pod.Status.StartTime != nil {
+			info.Age = time.Since(pod.Status.StartTime.Time)
+		}
+		info.HelmFound = pod.Annotations[hipconsts.AnnotationHelmFound] == "true"
+		info.IsHelm4 = pod.Annotations[hipconsts.AnnotationHelm4] == "true"
+		info.HomeDir = pod.Annotations[hipconsts.AnnotationHomeDirectory]
+		infos = append(infos, info)
+	}
+	return infos, nil
+}
+
+// GetDaemonStatus returns detailed status information for a specific daemon pod.
+func (m *Manager) GetDaemonStatus(name string) (*DaemonInfo, error) {
+	pod, err := m.GetDaemonPod(name)
+	if err != nil {
+		return nil, err
+	}
+
+	info := &DaemonInfo{
+		Name:    name,
+		PodName: pod.Name,
+		Phase:   pod.Status.Phase,
+		Node:    pod.Spec.NodeName,
+		Image:   pod.Spec.Containers[0].Image,
+	}
+	if pod.Status.StartTime != nil {
+		info.Age = time.Since(pod.Status.StartTime.Time)
+	}
+	info.HelmFound = pod.Annotations[hipconsts.AnnotationHelmFound] == "true"
+	info.IsHelm4 = pod.Annotations[hipconsts.AnnotationHelm4] == "true"
+	info.HomeDir = pod.Annotations[hipconsts.AnnotationHomeDirectory]
+	return info, nil
 }

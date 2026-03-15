@@ -20,7 +20,7 @@ endif
 
 # Test configuration
 GINKGO         := $(GOBIN)/ginkgo
-GINKGO_PROCS   ?= 3
+GINKGO_PROCS   ?= 5
 GINKGO_FLAGS   ?= --silence-skips --procs=$(GINKGO_PROCS) --randomize-all
 E2E_TIMEOUT    ?= 10m
 

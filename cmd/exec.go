@@ -38,6 +38,11 @@ func newExecCmd() *cobra.Command {
 		timeout := viper.GetDuration("timeout")
 		opts.Timeout = timeout + time.Minute*10
 
+		// Handle dry-run: print pod spec and exit
+		if opts.DryRun {
+			return internal.Pod().PrintPodSpecYAML(opts, false)
+		}
+
 		defer func() {
 			cleanupErr := internal.Pod().DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
 			if cleanupErr != nil && returnErr == nil {
@@ -105,7 +110,40 @@ func newExecCmd() *cobra.Command {
 
 		// Execute command
 		cmdToUse := strings.Join(args, " ")
-		return internal.Pod().ExecuteCommand(cmd.Context(), pod, cmdToUse, userInfo.HomeDirectory, opts)
+		execErr := internal.Pod().ExecuteCommand(cmd.Context(), pod, cmdToUse, userInfo.HomeDirectory, opts)
+
+		// Copy files from pod to host (even if command failed, user may want artifacts)
+		if len(opts.CopyFrom) > 0 {
+			copyFromMap, parseErr := parseCopyFromMappings(opts.CopyFrom)
+			if parseErr != nil {
+				internal.Pod().SignalCopyDone(pod)
+				if execErr != nil {
+					return execErr
+				}
+				return parseErr
+			}
+			var copyErrors []error
+			for podPath, hostPath := range copyFromMap {
+				expanded, expandErr := expand(hostPath)
+				if expandErr != nil {
+					copyErrors = append(copyErrors, expandErr)
+					continue
+				}
+				if copyErr := internal.Pod().CopyFileFromPod(pod, podPath, expanded, opts.CopyAttempts); copyErr != nil {
+					copyErrors = append(copyErrors, copyErr)
+				}
+			}
+			// Signal the pod that copy is done so it can exit
+			internal.Pod().SignalCopyDone(pod)
+			if len(copyErrors) > 0 {
+				if execErr != nil {
+					return execErr
+				}
+				return copyErrors[0]
+			}
+		}
+
+		return execErr
 	}
 	return execCmd
 }

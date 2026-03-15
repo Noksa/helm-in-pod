@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
@@ -94,6 +95,9 @@ func addPodCreationFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions) {
 	cmd.Flags().StringVar(&opts.ImagePullSecret, "image-pull-secret", "", "Specify an image pull secret which should be used to pull --image from private repository")
 	cmd.Flags().StringVar(&opts.PullPolicy, "pull-policy", "IfNotPresent", "Image pull policy to use in helm pod")
 	cmd.Flags().StringVarP(&opts.Image, "image", "i", "docker.io/noksa/kubectl-helm:v1.34.5-v4.1.1", "An image which will be used")
+	cmd.Flags().StringSliceVar(&opts.Volumes, "volume", []string{}, "Mount volumes in the pod. Format: type:name:mountPath[:ro]. Types: pvc, secret, configmap, hostpath. Examples: 'pvc:my-claim:/data', 'secret:my-secret:/etc/creds:ro', 'configmap:my-cm:/etc/config', 'hostpath:/var/log:/host-logs:ro'")
+	cmd.Flags().StringVar(&opts.ServiceAccount, "service-account", "", "Service account to use in the pod (default: helm-in-pod)")
+	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Print the pod spec as YAML without creating the pod")
 }
 
 func addRuntimeFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions, copyRepoDefault bool) {
@@ -104,4 +108,18 @@ func addRuntimeFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions, copyRepoD
 	cmd.Flags().StringSliceVarP(&opts.Files, "copy", "c", []string{}, "A map of files/directories which should be copied from host to container. Can be specified multiple times. Example: -c /path_on_host/values.yaml:/path_in_container/values.yaml")
 	cmd.Flags().IntVar(&opts.CopyAttempts, "copy-attempts", 3, "Attempts count in each copy action (in copy-repo and copy flags). If your connection to k8s api is no stable, you can try to increase the attempts")
 	cmd.Flags().IntVar(&opts.UpdateRepoAttempts, "update-repo-attempts", 3, "Attempts count in each helm update repo action. Applicable only if copy-repo set to true")
+	cmd.Flags().StringSliceVar(&opts.CopyFrom, "copy-from", []string{}, "Copy files/directories from pod to host after command execution. Format: /path_in_pod:/path_on_host. Example: --copy-from /tmp/output.yaml:./output.yaml")
+}
+
+// parseCopyFromMappings parses --copy-from flag values into a map of pod_path -> host_path.
+func parseCopyFromMappings(copyFrom []string) (map[string]string, error) {
+	result := map[string]string{}
+	for _, val := range copyFrom {
+		parts := strings.SplitN(val, ":", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return nil, fmt.Errorf("invalid --copy-from format %q, expected /pod/path:/host/path", val)
+		}
+		result[parts[0]] = parts[1]
+	}
+	return result, nil
 }

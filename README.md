@@ -41,6 +41,8 @@ When `helm` runs commands from your local machine, network latency to distant Ku
 | 📁 **File Transfer**         | Copy files/folders from host to pod                 |
 | 🌍 **Environment Variables** | Set custom environment variables in the pod         |
 | 🐳 **Custom Images**         | Use any Docker image for execution                  |
+| 💾 **Volume Mounts**         | Mount PVCs, secrets, configmaps, and more into pods |
+| 🔍 **Dry Run**               | Preview pod specs as YAML before creating anything  |
 
 ---
 
@@ -97,6 +99,10 @@ helm in-pod daemon exec --name dev -- "helm upgrade myapp ..."
 
 # Or open an interactive shell 🐚
 helm in-pod daemon shell --name dev
+
+# Check on your daemons 📊
+helm in-pod daemon list
+helm in-pod daemon status --name dev
 
 # Stop when done
 helm in-pod daemon stop --name dev
@@ -156,6 +162,9 @@ helm in-pod exec [FLAGS] -- "COMMAND"
 | `--annotations`       |       | Additional annotations on the pod                                            |
 | `--image-pull-secret` |       | Image pull secret for private repositories                                   |
 | `--pull-policy`       |       | Image pull policy (default: `IfNotPresent`)                                  |
+| `--volume`            |       | Mount volumes in the pod (repeatable). Format: `type:name:mountPath[:ro]`. Types: `pvc`, `secret`, `configmap`, `hostpath` |
+| `--service-account`   |       | Service account for the pod (default: `helm-in-pod`)                         |
+| `--dry-run`           |       | Print the pod spec as YAML without creating anything                         |
 
 <details>
 <summary>⚠️ <strong>Deprecated Flags</strong></summary>
@@ -182,6 +191,7 @@ When using a deprecated flag, its value is applied to both the request and limit
 | `--update-repo`          |       | Update specified Helm repositories                      |
 | `--copy-attempts`        |       | Retry count for copy actions (default: 3)               |
 | `--update-repo-attempts` |       | Retry count for repo update actions (default: 3)        |
+| `--copy-from`            |       | Copy files/dirs from pod to host after execution (repeatable). Format: `/pod/path:/host/path` |
 
 ---
 
@@ -413,6 +423,143 @@ helm in-pod exec -i "alpine/helm:3.12.1" -- "helm list -A"
 # Custom image with additional tools
 helm in-pod exec -i "alpine:3.18" -- "apk add curl --no-cache && curl google.com"
 ```
+
+</details>
+
+### 💾 Volume Mounts
+
+<details>
+<summary><strong>Mount a PersistentVolumeClaim</strong></summary>
+
+```bash
+helm in-pod exec --volume pvc:my-claim:/data -- "ls /data"
+```
+
+</details>
+
+<details>
+<summary><strong>Mount secrets and configmaps (read-only)</strong></summary>
+
+```bash
+helm in-pod exec \
+  --volume secret:my-secret:/etc/creds:ro \
+  --volume configmap:my-cm:/etc/config:ro -- \
+  "cat /etc/creds/password"
+```
+
+</details>
+
+<details>
+<summary><strong>Mount host path</strong></summary>
+
+```bash
+helm in-pod exec --volume hostpath:/var/log:/host-logs:ro -- "ls /host-logs"
+```
+
+</details>
+
+<details>
+<summary><strong>Multiple volumes in one command</strong></summary>
+
+```bash
+helm in-pod exec \
+  --volume pvc:data:/data \
+  --volume secret:creds:/etc/creds:ro \
+  --volume configmap:app-config:/etc/config -- \
+  "helm upgrade myapp repo/chart -f /etc/config/values.yaml"
+```
+
+</details>
+
+### 🔑 Service Account
+
+<details>
+<summary><strong>Use a custom service account</strong></summary>
+
+```bash
+# Run with a specific service account instead of the default helm-in-pod
+helm in-pod exec --service-account my-sa -- "helm list -A"
+
+# Combine with daemon mode
+helm in-pod daemon start --name dev --service-account ci-deployer --copy-repo
+```
+
+</details>
+
+### 🔍 Dry Run
+
+<details>
+<summary><strong>Preview pod spec before creating</strong></summary>
+
+```bash
+# Print the pod spec as YAML without creating anything
+helm in-pod exec --dry-run -- "helm install myapp repo/chart"
+
+# Preview a daemon pod spec with custom configuration
+helm in-pod daemon start --name dev --dry-run \
+  --volume pvc:data:/data \
+  --service-account my-sa \
+  --copy-repo
+```
+
+</details>
+
+### 📤 Copy From Pod
+
+<details>
+<summary><strong>Copy files back from pod after execution</strong></summary>
+
+```bash
+# Copy a single file
+helm in-pod exec \
+  --copy-from /tmp/output.yaml:./output.yaml -- \
+  "helm template myapp repo/chart > /tmp/output.yaml"
+
+# Copy multiple paths (e.g., test artifacts)
+helm in-pod exec \
+  --copy-from /tmp/report.html:./report.html \
+  --copy-from /tmp/logs:/tmp/local-logs -- \
+  "run-tests --output /tmp/report.html --log-dir /tmp/logs"
+```
+
+> 💡 Files are copied even if the command fails — useful for retrieving test artifacts, logs, or partial outputs.
+
+</details>
+
+<details>
+<summary><strong>Copy from a daemon pod</strong></summary>
+
+```bash
+helm in-pod daemon exec --name dev \
+  --copy-from /tmp/diff-output.txt:./diff-output.txt -- \
+  "helm diff upgrade myapp repo/chart > /tmp/diff-output.txt"
+```
+
+</details>
+
+### 📊 Daemon Status & List
+
+<details>
+<summary><strong>List all daemon pods</strong></summary>
+
+```bash
+# List all running daemon pods
+helm in-pod daemon list
+
+# Alias
+helm in-pod daemon ls
+```
+
+</details>
+
+<details>
+<summary><strong>Check status of a specific daemon</strong></summary>
+
+```bash
+helm in-pod daemon status --name dev
+```
+
+Displays: name, pod name, phase, node, age, image, helm version, and home directory.
 
 </details>
 

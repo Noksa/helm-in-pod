@@ -85,7 +85,17 @@ All Helm repositories and configurations are already set up. Perfect for:
 
 Type `exit` or press `Ctrl+D` to close the shell.
 
-### 4️⃣ Stop the Daemon
+### 4️⃣ Check on Your Daemons
+
+```bash
+# List all running daemon pods
+helm in-pod daemon list
+
+# Get detailed status of a specific daemon
+helm in-pod daemon status --name my-daemon
+```
+
+### 5️⃣ Stop the Daemon
 
 ```bash
 helm in-pod daemon stop --name my-daemon
@@ -149,6 +159,56 @@ helm in-pod daemon exec --name ci -- "kubectl rollout status ..."
 helm in-pod daemon stop --name ci
 ```
 
+### CI/CD with Volume Mounts & Artifacts
+
+```bash
+# Start daemon with a PVC for shared data and a secret for registry creds
+helm in-pod daemon start --name ci \
+  --volume pvc:ci-data:/data \
+  --volume secret:registry-creds:/etc/creds:ro \
+  --service-account ci-deployer \
+  --copy-repo
+
+# Run tests and copy artifacts back to host
+helm in-pod daemon exec --name ci \
+  --copy-from /tmp/test-report.html:./test-report.html \
+  --copy-from /tmp/coverage:/tmp/local-coverage -- \
+  "helm test myapp --logs > /tmp/test-report.html"
+
+# Cleanup
+helm in-pod daemon stop --name ci
+```
+
+### Dry Run for Validation
+
+```bash
+# Preview the daemon pod spec before creating it
+helm in-pod daemon start --name staging --dry-run \
+  --volume pvc:data:/data \
+  --service-account staging-sa \
+  --copy-repo
+
+# Satisfied? Remove --dry-run to create for real
+helm in-pod daemon start --name staging \
+  --volume pvc:data:/data \
+  --service-account staging-sa \
+  --copy-repo
+```
+
+### Monitoring Multiple Daemons
+
+```bash
+# Start daemons for different environments
+helm in-pod daemon start --name dev --copy-repo
+helm in-pod daemon start --name staging --copy-repo
+
+# List all running daemons at a glance
+helm in-pod daemon list
+
+# Inspect a specific daemon
+helm in-pod daemon status --name staging
+```
+
 ### Interactive Development
 
 ```bash
@@ -201,6 +261,9 @@ All flags from `exec` command:
 - Metadata: `--labels`, `--annotations`
 - Image: `--pull-policy` (default: `IfNotPresent`)
 - Protection: `--create-pdb` (default: true) - Protects pod from voluntary disruptions
+- Volumes: `--volume` (repeatable) - Mount PVCs, secrets, configmaps, or hostPath into the pod
+- Service account: `--service-account` - Use a custom service account (default: `helm-in-pod`)
+- Dry run: `--dry-run` - Print the pod spec as YAML without creating the pod
 - Helm: `--copy-repo`, `--update-repo`
 - Files: `--copy`
 - Environment: `--env`, `--subst-env`
@@ -212,6 +275,7 @@ Runtime flags only (pod already exists):
 - `--env`, `-e` - Environment variables
 - `--subst-env`, `-s` - Substitute from host
 - `--copy`, `-c` - Copy files
+- `--copy-from` - Copy files/dirs from pod to host after execution (repeatable). Format: `/pod/path:/host/path`
 - `--clean` - Paths to delete before copying files (ensures clean state)
 - `--copy-repo` - Copy/replace helm repos (**default: false** — unlike `exec` where it defaults to true)
 - `--update-repo` - Update specific repos
@@ -223,6 +287,27 @@ Runtime flags only (pod already exists):
 ### `daemon shell`
 - `--name` - Daemon name (required)
 - `--shell` - Shell to use (default: sh, options: bash, zsh, etc.)
+
+### `daemon status`
+- `--name` - Daemon name (required)
+
+Shows detailed status of a specific daemon pod in a property/value table: name, pod name, phase, node, age, image, helm version, and home directory.
+
+```bash
+helm in-pod daemon status --name dev
+```
+
+### `daemon list`
+- No required flags
+- Alias: `ls`
+
+Lists all daemon pods in a table with columns: name, pod, phase, node, age, helm version, and image. Shows "No daemon pods found" when empty.
+
+```bash
+helm in-pod daemon list
+# or
+helm in-pod daemon ls
+```
 
 ### `daemon stop`
 - `--name` - Daemon name (required)
@@ -266,6 +351,11 @@ echo $?  # prints the exit code from the command inside the pod
 - Daemon pods are named `daemon-<name>` - you can see them with `kubectl get pods -n helm-in-pod`
 - **Use `daemon shell`** for interactive debugging and exploration with full Helm context
 - Remember that `--copy-repo` defaults to `false` in `daemon exec` — pass it explicitly if you need to re-sync repos
+- **Use `--dry-run`** to preview the pod spec before creating — great for validating volume mounts, service accounts, and resource settings
+- **Use `--volume`** to mount PVCs, secrets, configmaps, or hostPath into the pod — append `:ro` for read-only access
+- **Use `--service-account`** when you need different RBAC permissions than the default `helm-in-pod` account
+- **Use `--copy-from`** to retrieve test artifacts, logs, or generated files from the pod — files are copied even if the command fails
+- **Use `daemon list` and `daemon status`** to monitor your running daemons without needing `kubectl`
 
 ## 🆚 When to Use What?
 
@@ -285,3 +375,8 @@ echo $?  # prints the exit code from the command inside the pod
 - Exploring cluster environment
 - Testing commands before scripting
 - Running ad-hoc operations manually
+
+**Use `daemon list` / `daemon status`** when:
+- Checking which daemon pods are running
+- Verifying a daemon's phase, node, or age
+- Monitoring daemons in CI/CD without `kubectl`

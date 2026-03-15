@@ -28,6 +28,7 @@ var _ = Describe("Flag Registration", func() {
 				"cpu-request", "cpu-limit", "memory-request", "memory-limit",
 				"host-network", "tolerations", "node-selector",
 				"image-pull-secret", "pull-policy", "image",
+				"volume", "service-account", "dry-run",
 			}
 			for _, name := range flags {
 				Expect(execCmd.Flags().Lookup(name)).NotTo(BeNil(), "flag --%s should be registered", name)
@@ -38,6 +39,7 @@ var _ = Describe("Flag Registration", func() {
 			flags := []string{
 				"env", "subst-env", "copy-repo", "update-repo",
 				"copy", "copy-attempts", "update-repo-attempts",
+				"copy-from",
 			}
 			for _, name := range flags {
 				Expect(execCmd.Flags().Lookup(name)).NotTo(BeNil(), "flag --%s should be registered", name)
@@ -210,6 +212,46 @@ var _ = Describe("Flag Registration", func() {
 		It("should parse --update-repo-attempts value", func() {
 			Expect(testCmd.Flags().Set("update-repo-attempts", "10")).To(Succeed())
 			Expect(opts.UpdateRepoAttempts).To(Equal(10))
+		})
+
+		It("should parse --volume as string slice", func() {
+			Expect(testCmd.Flags().Set("volume", "pvc:my-claim:/data")).To(Succeed())
+			Expect(opts.Volumes).To(ContainElement("pvc:my-claim:/data"))
+		})
+
+		It("should parse multiple --volume flags", func() {
+			Expect(testCmd.Flags().Set("volume", "pvc:claim1:/data")).To(Succeed())
+			Expect(testCmd.Flags().Set("volume", "secret:sec1:/creds")).To(Succeed())
+			Expect(opts.Volumes).To(ContainElements("pvc:claim1:/data", "secret:sec1:/creds"))
+		})
+
+		It("should parse --service-account value", func() {
+			Expect(testCmd.Flags().Set("service-account", "my-sa")).To(Succeed())
+			Expect(opts.ServiceAccount).To(Equal("my-sa"))
+		})
+
+		It("should have empty default for --service-account", func() {
+			Expect(opts.ServiceAccount).To(BeEmpty())
+		})
+
+		It("should parse --dry-run as bool", func() {
+			Expect(testCmd.Flags().Set("dry-run", "true")).To(Succeed())
+			Expect(opts.DryRun).To(BeTrue())
+		})
+
+		It("should have false default for --dry-run", func() {
+			Expect(opts.DryRun).To(BeFalse())
+		})
+
+		It("should parse --copy-from as string slice", func() {
+			Expect(testCmd.Flags().Set("copy-from", "/pod/path:/host/path")).To(Succeed())
+			Expect(opts.CopyFrom).To(ContainElement("/pod/path:/host/path"))
+		})
+
+		It("should parse multiple --copy-from flags", func() {
+			Expect(testCmd.Flags().Set("copy-from", "/tmp/a:./a")).To(Succeed())
+			Expect(testCmd.Flags().Set("copy-from", "/tmp/b:./b")).To(Succeed())
+			Expect(opts.CopyFrom).To(ContainElements("/tmp/a:./a", "/tmp/b:./b"))
 		})
 	})
 })

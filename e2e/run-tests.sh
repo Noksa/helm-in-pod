@@ -42,6 +42,7 @@ export KIND_CLUSTER="${E2E_CLUSTER_NAME}"
 cyber_log "Running e2e tests with kubeconfig: ${CYBER_G}${E2E_KUBECONFIG}${CYBER_X}"
 # Run with parallel execution for speed (each Describe gets its own process)
 # shellcheck disable=SC2086
-ginkgo --tags=e2e --procs=4 --silence-skips --timeout=20m $GINKGO_ARGS "$@" "${E2E_DIR}/"
+GINKGO_PROCS="${GINKGO_PROCS:-5}"
+ginkgo --tags=e2e --procs="${GINKGO_PROCS}" --silence-skips --timeout=20m $GINKGO_ARGS "$@" "${E2E_DIR}/"
 
 cyber_ok "E2E tests completed"

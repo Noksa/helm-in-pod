@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -188,6 +189,8 @@ func (m *Manager) CopyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions, ex
 }
 
 func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command string, homeDirectory string, opts cmdoptions.ExecOptions) error {
+	copyFromMode := len(opts.CopyFrom) > 0
+
 	scriptPath := fmt.Sprintf("%v/wrapped-script.sh", homeDirectory)
 
 	tempScriptFile, err := os.CreateTemp("", hipconsts.HelmInPodNamespace)
@@ -226,7 +229,22 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 	log.Infof("%v Running '%v' command", logz.LogPod(), color.YellowString(command))
 
 	b := &bytes.Buffer{}
-	multiWriter := io.MultiWriter(os.Stdout, b)
+	var logWriter io.Writer
+
+	// In copy-from mode, wrap the writer to intercept the exit code marker.
+	// We use a cancellable context so the marker writer can break the blocking
+	// StreamLogsFromPod call once the marker is detected.
+	var mw *exitCodeMarkerWriter
+	var cancelStream context.CancelFunc
+	streamCtx := context.Background()
+	if copyFromMode {
+		streamCtx, cancelStream = context.WithCancel(streamCtx)
+		defer cancelStream()
+		mw = newExitCodeMarkerWriter(io.MultiWriter(os.Stdout, b), cancelStream)
+		logWriter = mw
+	} else {
+		logWriter = io.MultiWriter(os.Stdout, b)
+	}
 
 	go func() {
 		<-ctx.Done()
@@ -253,11 +271,18 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 				continue
 			}
 			if phase == corev1.PodFailed || phase == corev1.PodSucceeded {
+				// Pod finished — do one final log stream to catch remaining output
+				// (e.g. the exit code marker for fast commands)
+				_ = m.StreamLogsFromPod(context.Background(), pod, logWriter, since)
 				return
 			}
-			err = m.StreamLogsFromPod(context.Background(), pod, multiWriter, since)
+			err = m.StreamLogsFromPod(streamCtx, pod, logWriter, since)
 			since = time.Now()
 			if err == nil {
+				return
+			}
+			// In copy-from mode, if we got the marker, stop streaming
+			if copyFromMode && mw.Found() {
 				return
 			}
 			log.Infof("got an error from streaming pod logs: %v", err)
@@ -266,6 +291,14 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 	})
 	wg.Wait()
 
+	if copyFromMode && mw.Found() {
+		code := mw.ExitCode()
+		log.Infof("%v Command exited with code %d (pod kept alive for copy-from)", logz.LogPod(), code)
+		if code != 0 {
+			return &hiperrors.ExitCodeError{Code: int32(code)}
+		}
+		return nil
+	}
 	return m.waitForPodCompletion(ctx, pod)
 }
 
@@ -436,4 +469,65 @@ func parseExitCodeFromError(err error) int {
 		code = code*10 + int(c-'0')
 	}
 	return code
+}
+
+// exitCodeMarkerWriter wraps an io.Writer and intercepts the exit code marker
+// line emitted by the pod script in copy-from mode. The marker line is consumed
+// (not forwarded to the underlying writer) and the exit code is stored.
+type exitCodeMarkerWriter struct {
+	inner      io.Writer
+	found      bool
+	exitCode   int
+	cancelFunc context.CancelFunc
+}
+
+func newExitCodeMarkerWriter(inner io.Writer, cancel context.CancelFunc) *exitCodeMarkerWriter {
+	return &exitCodeMarkerWriter{inner: inner, cancelFunc: cancel}
+}
+
+func (w *exitCodeMarkerWriter) Write(p []byte) (int, error) {
+	if w.found {
+		return w.inner.Write(p)
+	}
+	s := string(p)
+	prefix := hipconsts.CopyFromExitCodeMarkerPrefix
+	suffix := hipconsts.CopyFromExitCodeMarkerSuffix
+	if strings.Contains(s, prefix) {
+		// Extract exit code between prefix and suffix
+		after, _ := strings.CutPrefix(s[strings.Index(s, prefix):], prefix)
+		if codeStr, ok := strings.CutSuffix(after, suffix+"\n"); !ok {
+			codeStr, _ = strings.CutSuffix(after, suffix)
+			after = codeStr
+		} else {
+			after = codeStr
+		}
+		code, err := strconv.Atoi(strings.TrimSpace(after))
+		if err == nil {
+			w.found = true
+			w.exitCode = code
+			w.cancelFunc()
+		}
+		return len(p), nil
+	}
+	return w.inner.Write(p)
+}
+
+func (w *exitCodeMarkerWriter) Found() bool {
+	return w.found
+}
+
+func (w *exitCodeMarkerWriter) ExitCode() int {
+	return w.exitCode
+}
+
+// SignalCopyDone creates the sentinel file in the pod to let it know
+// that copy-from is complete and it can exit.
+func (m *Manager) SignalCopyDone(pod *corev1.Pod) {
+	log.Debugf("%v %v Signaling copy-done", logz.LogHost(), logz.LogPod())
+	_, _, err := m.client().RunCommandInPod(
+		fmt.Sprintf("touch %s", hipconsts.CopyFromDoneFile),
+		hipconsts.HelmInPodNamespace, pod.Name, pod.Namespace, nil)
+	if err != nil {
+		log.Debugf("%v Failed to signal copy-done (pod may have already exited): %v", logz.LogHost(), err)
+	}
 }
