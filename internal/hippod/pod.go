@@ -90,7 +90,7 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	if err != nil {
 		return nil, err
 	}
-	logz.Host().Info().Msgf("Creating '%v' pod", Namespace)
+	logz.Host().Info().Msgf("Creating '%v' pod", color.MagentaString(Namespace))
 
 	podSpec, err := buildPodSpec(opts, false)
 	if err != nil {
@@ -150,12 +150,12 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 		os.Exit(1)
 	}()
 
-	logz.Host().Debug().Msgf("%v pod has been created", color.CyanString(pod.Name))
+	logz.Host().Debug().Msgf("%v pod has been created", color.MagentaString(pod.Name))
 	return pod, m.waitUntilPodIsRunning(pod)
 }
 
 func (m *Manager) waitUntilPodIsRunning(pod *corev1.Pod) error {
-	logz.Host().Info().Msgf("Waiting until %v pod is ready", color.CyanString(pod.Name))
+	logz.Host().Info().Msgf("Waiting until %v pod is ready", color.MagentaString(pod.Name))
 
 	timeout := time.Minute * 5
 	start := time.Now()
