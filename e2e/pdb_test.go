@@ -325,19 +325,22 @@ var _ = Describe("PodDisruptionBudget", func() {
 			err := cmd.Start()
 			Expect(err).NotTo(HaveOccurred())
 
-			// Wait a bit for pod to be created
-			Eventually(func() bool {
+			var operationID string
+			Eventually(func() string {
 				checkCmd := exec.Command("kubectl", "get", "pod", "-n", hipconsts.HelmInPodNamespace,
-					"-l", fmt.Sprintf("test=%s", testLabel), "--no-headers")
-				output, _ := Run(checkCmd)
-				return strings.Contains(output, hipconsts.HelmInPodNamespace)
-			}, "30s", "1s").Should(BeTrue(), "Pod should be created")
+					"-l", fmt.Sprintf("test=%s", testLabel),
+					"-o", fmt.Sprintf("jsonpath={.items[0].metadata.labels.%s}", strings.ReplaceAll(hipconsts.LabelOperationID, "/", "\\/")))
+				out, err := Run(checkCmd)
+				if err != nil {
+					return ""
+				}
+				return out
+			}, "30s", "1s").ShouldNot(BeEmpty(), "Pod should be created with operation-id label")
 
-			// Get operation ID
 			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.HelmInPodNamespace,
 				"-l", fmt.Sprintf("test=%s", testLabel),
 				"-o", fmt.Sprintf("jsonpath={.items[0].metadata.labels.%s}", strings.ReplaceAll(hipconsts.LabelOperationID, "/", "\\/")))
-			operationID, err := Run(cmd)
+			operationID, err = Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(operationID).NotTo(BeEmpty())
 
