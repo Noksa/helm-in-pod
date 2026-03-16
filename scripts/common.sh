@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Common library for all scripts - handles cyberpunk theme auto-download and initialization
 
+# Ensure sourced, not executed
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  echo "Error: This script must be sourced, not executed directly."
+  exit 1
+fi
+
 set -euo pipefail
 
 # Get project root directory

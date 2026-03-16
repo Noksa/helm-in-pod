@@ -21,7 +21,7 @@ endif
 # Test configuration
 GINKGO         := $(GOBIN)/ginkgo
 GINKGO_PROCS   ?= 5
-GINKGO_FLAGS   ?= --silence-skips --procs=$(GINKGO_PROCS) --randomize-all
+GINKGO_FLAGS   ?= --silence-skips --procs=$(GINKGO_PROCS) --randomize-all $(if $(RACE),--race --trace,)
 E2E_TIMEOUT    ?= 10m
 
 # Test runner macros
@@ -94,11 +94,19 @@ install: ## Uninstall and install specific version (use VERSION=xxx, e.g., VERSI
 ##@ Testing
 
 .PHONY: test-unit
-test-unit: ## Run unit tests
+test-unit: ## Run unit tests (RACE=1 for race detection)
 	$(call run_tests,--skip-package=e2e -r)
 
 .PHONY: test
 test: test-unit ## Run all unit tests (alias)
+
+.PHONY: test-short
+test-short: ## Run tests (short mode, skip slow tests)
+	$(call run_tests,--short --skip-package=e2e -r)
+
+.PHONY: test-focus
+test-focus: ## Run focused tests (FOCUS="pattern")
+	$(call run_tests,--skip-package=e2e -r,$(FOCUS))
 
 .PHONY: test-verbose
 test-verbose: ## Run unit tests with verbose output
@@ -114,6 +122,12 @@ test-coverage: $(CYBER_CACHE) ## Run tests with coverage
 test-plugin: ## Test plugin as Helm plugin (integration test)
 	@./scripts/test-plugin.sh
 
+.PHONY: test-ci
+test-ci: ## Run tests in CI (race + randomized + reports)
+	@go run github.com/onsi/ginkgo/v2/ginkgo -r --race --trace \
+		--randomize-all --keep-going --cover --coverprofile=coverage.out \
+		--json-report=report.json --skip-package=e2e ./...
+
 ##@ E2E Testing
 
 .PHONY: test-e2e-setup
@@ -124,8 +138,17 @@ test-e2e-setup: $(CYBER_CACHE) ## Setup kind cluster for e2e tests
 test-e2e-teardown: $(CYBER_CACHE) ## Teardown kind cluster for e2e tests
 	@./e2e/teardown-cluster.sh
 
+.PHONY: test-e2e-prepare
+test-e2e-prepare: ## Setup cluster if missing, otherwise reuse existing
+	@if kind get clusters 2>/dev/null | grep -q "^helm-in-pod-e2e$$"; then \
+		echo "Cluster exists — reusing..."; \
+		kind export kubeconfig --name helm-in-pod-e2e --kubeconfig e2e/.kubeconfig 2>/dev/null; \
+	else \
+		./e2e/setup-cluster.sh; \
+	fi
+
 .PHONY: test-e2e
-test-e2e: ## Run e2e tests (use FOCUS="pattern" to filter)
+test-e2e: test-e2e-prepare ## Run e2e tests (use FOCUS="pattern" to filter)
 	$(call run_e2e,$(FOCUS))
 
 .PHONY: test-e2e-serial
@@ -163,5 +186,5 @@ binaries: ## Build release binaries for all platforms (use TARGET=os/arch for si
 .PHONY: clean
 clean: $(CYBER_CACHE) ## Clean build artifacts
 	@source $(CYBER_CACHE) && cyber_log "Cleaning up"
-	@rm -rf bin/ generated/ coverage.out coverage.html
+	@rm -rf bin/ generated/ coverage.out coverage.html report.json
 	@source $(CYBER_CACHE) && cyber_ok "Cleaned"

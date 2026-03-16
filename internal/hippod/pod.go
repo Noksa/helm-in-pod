@@ -27,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 )
@@ -155,54 +156,50 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 func (m *Manager) waitUntilPodIsRunning(pod *corev1.Pod) error {
 	logz.Host().Info().Msgf("Waiting until %v pod is ready", color.MagentaString(pod.Name))
 
-	timeout := time.Minute * 5
-	start := time.Now()
-
-	for time.Since(start) <= timeout {
-		stdout, stderr, err := m.client().ExecInPod("[ -f /tmp/ready ] && echo ready", Namespace, pod.Name, pod.Namespace)
-		if err == nil && strings.Contains(stdout, "ready") {
-			logz.Host().Debug().Msgf("%v pod is ready", color.CyanString(pod.Name))
-			return nil
-		}
-
+	err := wait.PollUntilContextTimeout(m.ctx, time.Second, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
 		if m.interrupted {
-			return fmt.Errorf("interrupted while was waiting for pod readiness")
+			return false, fmt.Errorf("interrupted while was waiting for pod readiness")
 		}
 
+		stdout, stderr, err := m.client().ExecInPod("[ -f /tmp/ready ] && echo ready", Namespace, pod.Name, pod.Namespace)
 		if err != nil {
 			logz.Pod().Debug().Msgf("Not ready yet: %v %v", stderr, err.Error())
+			return false, nil
 		}
-
-		time.Sleep(time.Second)
+		if strings.Contains(stdout, "ready") {
+			logz.Host().Debug().Msgf("%v pod is ready", color.CyanString(pod.Name))
+			return true, nil
+		}
+		return false, nil
+	})
+	if wait.Interrupted(err) {
+		return fmt.Errorf("timeout waiting pod readiness")
 	}
-
-	return fmt.Errorf("timeout waiting pod readiness")
+	return err
 }
 
 func (m *Manager) waitUntilPodIsDeleted(podName string) error {
 	logz.Host().Debug().Msgf("Waiting for pod %v to be deleted", color.CyanString(podName))
 
-	timeout := time.Minute * 2
-	start := time.Now()
-
-	for time.Since(start) <= timeout {
-		_, err := m.client().ClientSet().CoreV1().Pods(Namespace).Get(m.ctx, podName, metav1.GetOptions{})
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				logz.Host().Info().Msgf("Pod %v has been deleted", color.CyanString(podName))
-				return nil
-			}
-			return fmt.Errorf("error checking pod status: %w", err)
-		}
-
+	err := wait.PollUntilContextTimeout(m.ctx, time.Second, 2*time.Minute, true, func(ctx context.Context) (bool, error) {
 		if m.interrupted {
-			return fmt.Errorf("interrupted while waiting for pod deletion")
+			return false, fmt.Errorf("interrupted while waiting for pod deletion")
 		}
 
-		time.Sleep(time.Second)
+		_, getErr := m.client().ClientSet().CoreV1().Pods(Namespace).Get(ctx, podName, metav1.GetOptions{})
+		if getErr != nil {
+			if k8serrors.IsNotFound(getErr) {
+				logz.Host().Info().Msgf("Pod %v has been deleted", color.CyanString(podName))
+				return true, nil
+			}
+			return false, fmt.Errorf("error checking pod status: %w", getErr)
+		}
+		return false, nil
+	})
+	if wait.Interrupted(err) {
+		return fmt.Errorf("timeout waiting for pod deletion")
 	}
-
-	return fmt.Errorf("timeout waiting for pod deletion")
+	return err
 }
 
 func (m *Manager) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string, attempts int) error {

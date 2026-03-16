@@ -22,6 +22,7 @@ import (
 	"helm.sh/helm/v4/pkg/cli"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -380,20 +381,22 @@ func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, c
 func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) error {
 	logz.Host().Debug().Msg("Waiting 60s until pod phase is changed to failed/succeeded")
 
-	timeout := time.Second * 60
-	start := time.Now()
 	var phase corev1.PodPhase
 
-	for time.Since(start) <= timeout {
-		var err error
-		phase, err = m.GetPodPhase(context.Background(), pod)
-		if err == nil && phase != corev1.PodRunning {
-			break
+	err := wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 60*time.Second, true, func(_ context.Context) (bool, error) {
+		p, getErr := m.GetPodPhase(context.Background(), pod)
+		if getErr != nil {
+			return false, nil
 		}
-		time.Sleep(time.Millisecond * 100)
-	}
+		phase = p
+		return phase == corev1.PodSucceeded || phase == corev1.PodFailed, nil
+	})
 
 	logz.Host().Debug().Msgf("Pod got phase: %v", color.CyanString("%v", phase))
+
+	if wait.Interrupted(err) {
+		return fmt.Errorf("unexpected pod phase: %v", phase)
+	}
 
 	if phase == corev1.PodFailed {
 		if ctx.Err() != nil {
@@ -407,10 +410,7 @@ func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) err
 		}
 		return fmt.Errorf("pod failed")
 	}
-	if phase == corev1.PodSucceeded {
-		return nil
-	}
-	return fmt.Errorf("unexpected pod phase: %v", phase)
+	return nil
 }
 
 // getContainerExitCode retrieves the exit code from the pod's container status.
