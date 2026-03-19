@@ -10,7 +10,6 @@ import (
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/logz"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -29,12 +28,12 @@ func newDaemonExecCmd() *cobra.Command {
 			if len(args) == 0 {
 				return fmt.Errorf("specify command to run")
 			}
-			log.Debugf("%s Looking for %s daemon", logz.LogHost(), color.CyanString(opts.Name))
-			pod, err := internal.Pod.GetDaemonPod(opts.Name)
+			logz.Host().Debug().Msgf("Looking for %s daemon", color.CyanString(opts.Name))
+			pod, err := internal.Pod().GetDaemonPod(opts.Name)
 			if err != nil {
 				return err
 			}
-			log.Infof("%s Found %s daemon", logz.LogHost(), color.CyanString(pod.Name))
+			logz.Host().Info().Msgf("Found %s daemon", color.CyanString(pod.Name))
 
 			homeDirectory := pod.Annotations[hipconsts.AnnotationHomeDirectory]
 			if homeDirectory == "" {
@@ -53,19 +52,19 @@ func newDaemonExecCmd() *cobra.Command {
 				}
 
 				if opts.CopyRepo {
-					err = internal.Pod.SyncHelmRepositories(pod, opts.ExecOptions, homeDirectory, isHelm4)
+					err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, homeDirectory, isHelm4)
 					if err != nil {
 						return err
 					}
 				} else if opts.UpdateAllRepos {
 					// Update all repos without copying
 					opts.UpdateRepo = []string{}
-					err = internal.Pod.UpdateHelmRepositories(pod, opts.ExecOptions, isHelm4)
+					err = internal.Pod().UpdateHelmRepositories(pod, opts.ExecOptions, isHelm4)
 					if err != nil {
 						return err
 					}
 				} else if len(opts.UpdateRepo) > 0 {
-					err = internal.Pod.UpdateHelmRepositories(pod, opts.ExecOptions, isHelm4)
+					err = internal.Pod().UpdateHelmRepositories(pod, opts.ExecOptions, isHelm4)
 					if err != nil {
 						return err
 					}
@@ -73,15 +72,8 @@ func newDaemonExecCmd() *cobra.Command {
 			}
 
 			if len(opts.Files) > 0 {
-				opts.FilesAsMap = map[string]string{}
-				for _, val := range opts.Files {
-					entries := strings.SplitSeq(val, ",")
-					for v := range entries {
-						splitted := strings.Split(v, ":")
-						opts.FilesAsMap[splitted[0]] = splitted[1]
-					}
-				}
-				err = internal.Pod.CopyUserFiles(pod, opts.ExecOptions, expand, opts.Clean)
+				opts.ParseFileMappings()
+				err = internal.Pod().CopyUserFiles(pod, opts.ExecOptions, expand, opts.Clean)
 				if err != nil {
 					return err
 				}
@@ -92,7 +84,29 @@ func newDaemonExecCmd() *cobra.Command {
 			if timeout == 0 {
 				timeout = time.Hour * 2
 			}
-			return internal.Pod.ExecuteCommandInDaemon(cmd.Context(), pod, cmdToUse, homeDirectory, timeout, opts.ExecOptions)
+			execErr := internal.Pod().ExecuteCommandInDaemon(cmd.Context(), pod, cmdToUse, homeDirectory, timeout, opts.ExecOptions)
+
+			// Copy files from pod to host after command execution
+			if len(opts.CopyFrom) > 0 {
+				copyFromMap, parseErr := parseCopyFromMappings(opts.CopyFrom)
+				if parseErr != nil {
+					if execErr != nil {
+						return execErr
+					}
+					return parseErr
+				}
+				for podPath, hostPath := range copyFromMap {
+					expanded, expandErr := expand(hostPath)
+					if expandErr != nil {
+						return expandErr
+					}
+					if copyErr := internal.Pod().CopyFileFromPod(pod, podPath, expanded, opts.CopyAttempts); copyErr != nil {
+						return copyErr
+					}
+				}
+			}
+
+			return execErr
 		},
 	}
 	execCmd.Flags().StringVar(&opts.Name, "name", "", "Daemon name (required)")

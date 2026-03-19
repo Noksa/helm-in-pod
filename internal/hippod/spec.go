@@ -8,12 +8,91 @@ import (
 
 	"github.com/noksa/go-helpers/helpers/gopointer"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/hipembedded"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-func buildPodSpec(opts cmdoptions.ExecOptions) (corev1.PodSpec, error) {
+// parseVolume parses a volume string in format: type:name:mountPath[:readOnly]
+// Supported types:
+//
+//	pvc:claim-name:/mount/path[:ro]
+//	secret:secret-name:/mount/path[:ro]
+//	configmap:cm-name:/mount/path[:ro]
+//	hostpath:host-path:/mount/path[:ro]
+func parseVolume(s string) (corev1.Volume, corev1.VolumeMount, error) {
+	parts := strings.SplitN(s, ":", 4)
+	if len(parts) < 3 {
+		return corev1.Volume{}, corev1.VolumeMount{}, fmt.Errorf("expected format type:name:mountPath[:ro], got %q", s)
+	}
+
+	volType := strings.ToLower(parts[0])
+	name := parts[1]
+	mountPath := parts[2]
+	readOnly := len(parts) == 4 && parts[3] == "ro"
+
+	// Sanitize volume name for k8s (must be DNS-compatible)
+	volName := strings.ReplaceAll(name, "/", "-")
+	volName = strings.ReplaceAll(volName, "_", "-")
+	volName = strings.TrimLeft(volName, "-")
+	if len(volName) > 63 {
+		volName = volName[:63]
+	}
+
+	mount := corev1.VolumeMount{
+		Name:      volName,
+		MountPath: mountPath,
+		ReadOnly:  readOnly,
+	}
+
+	var vol corev1.Volume
+	switch volType {
+	case "pvc":
+		vol = corev1.Volume{
+			Name: volName,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: name,
+					ReadOnly:  readOnly,
+				},
+			},
+		}
+	case "secret":
+		vol = corev1.Volume{
+			Name: volName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: name,
+				},
+			},
+		}
+	case "configmap":
+		vol = corev1.Volume{
+			Name: volName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: name},
+				},
+			},
+		}
+	case "hostpath":
+		vol = corev1.Volume{
+			Name: volName,
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: name,
+				},
+			},
+		}
+	default:
+		return corev1.Volume{}, corev1.VolumeMount{}, fmt.Errorf("unsupported volume type %q, supported: pvc, secret, configmap, hostpath", volType)
+	}
+
+	return vol, mount, nil
+}
+
+func buildPodSpec(opts cmdoptions.ExecOptions, daemon bool) (corev1.PodSpec, error) {
 	var envVars []corev1.EnvVar
 	for _, env := range opts.SubstEnv {
 		val := os.Getenv(env)
@@ -33,20 +112,52 @@ func buildPodSpec(opts cmdoptions.ExecOptions) (corev1.PodSpec, error) {
 		Value: strconv.Itoa(int(opts.Timeout.Seconds())),
 	})
 
-	resourceList := corev1.ResourceList{}
+	if !daemon && len(opts.CopyFrom) > 0 {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  hipconsts.EnvWaitCopyDone,
+			Value: "1",
+		})
+	}
 
-	if opts.Cpu != "" && opts.Cpu != "0" {
-		resourceList["cpu"] = resource.MustParse(opts.Cpu)
+	requests := corev1.ResourceList{}
+	limits := corev1.ResourceList{}
+
+	if opts.CpuRequest != "" && opts.CpuRequest != "0" {
+		requests["cpu"] = resource.MustParse(opts.CpuRequest)
 	}
-	if opts.Memory != "" && opts.Memory != "0" {
-		resourceList["memory"] = resource.MustParse(opts.Memory)
+	if opts.CpuLimit != "" && opts.CpuLimit != "0" {
+		limits["cpu"] = resource.MustParse(opts.CpuLimit)
 	}
+	if opts.MemoryRequest != "" && opts.MemoryRequest != "0" {
+		requests["memory"] = resource.MustParse(opts.MemoryRequest)
+	}
+	if opts.MemoryLimit != "" && opts.MemoryLimit != "0" {
+		limits["memory"] = resource.MustParse(opts.MemoryLimit)
+	}
+
 	securityContext := &corev1.SecurityContext{}
 	if opts.RunAsUser > -1 {
 		securityContext.RunAsUser = gopointer.NewOf(opts.RunAsUser)
 	}
 	if opts.RunAsGroup > -1 {
 		securityContext.RunAsGroup = gopointer.NewOf(opts.RunAsGroup)
+	}
+
+	// Parse volumes
+	var volumes []corev1.Volume
+	var volumeMounts []corev1.VolumeMount
+	for _, v := range opts.Volumes {
+		vol, mount, err := parseVolume(v)
+		if err != nil {
+			return corev1.PodSpec{}, fmt.Errorf("invalid volume %q: %w", v, err)
+		}
+		volumes = append(volumes, vol)
+		volumeMounts = append(volumeMounts, mount)
+	}
+
+	serviceAccountName := Namespace
+	if opts.ServiceAccount != "" {
+		serviceAccountName = opts.ServiceAccount
 	}
 
 	podSpec := corev1.PodSpec{
@@ -59,6 +170,7 @@ func buildPodSpec(opts cmdoptions.ExecOptions) (corev1.PodSpec, error) {
 			SecurityContext: securityContext,
 			Args:            []string{hipembedded.GetShScript()},
 			WorkingDir:      "/",
+			VolumeMounts:    volumeMounts,
 			StartupProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					Exec: &corev1.ExecAction{
@@ -71,15 +183,16 @@ func buildPodSpec(opts cmdoptions.ExecOptions) (corev1.PodSpec, error) {
 				FailureThreshold: 60,
 			},
 		}},
+		Volumes:                       volumes,
 		RestartPolicy:                 corev1.RestartPolicyNever,
-		ServiceAccountName:            Namespace,
+		ServiceAccountName:            serviceAccountName,
 		AutomountServiceAccountToken:  gopointer.NewOf(true),
 		TerminationGracePeriodSeconds: gopointer.NewOf[int64](300),
 	}
-	if len(resourceList) > 0 {
-		podSpec.Resources = &corev1.ResourceRequirements{
-			Requests: resourceList,
-			Limits:   resourceList,
+	if len(requests) > 0 || len(limits) > 0 {
+		podSpec.Containers[0].Resources = corev1.ResourceRequirements{
+			Requests: requests,
+			Limits:   limits,
 		}
 	}
 
@@ -152,7 +265,7 @@ func parseToleration(s string) (corev1.Toleration, error) {
 }
 
 func buildDaemonPodSpec(opts cmdoptions.ExecOptions) (corev1.PodSpec, error) {
-	podSpec, err := buildPodSpec(opts)
+	podSpec, err := buildPodSpec(opts, true)
 	if err != nil {
 		return corev1.PodSpec{}, err
 	}

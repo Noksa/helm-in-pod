@@ -11,8 +11,35 @@ CYBER_URL := https://raw.githubusercontent.com/Noksa/install-scripts/main/cyberp
 VERSION := $(shell grep 'version:' plugin.yaml | cut -d '"' -f 2)
 GO_VERSION := $(shell go version | cut -d ' ' -f 3)
 
-# Ginkgo
-GINKGO_BIN := $(shell go env GOPATH)/bin/ginkgo
+# Go binary paths
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
+else
+GOBIN=$(shell go env GOBIN)
+endif
+
+# Test configuration
+GINKGO         := $(GOBIN)/ginkgo
+GINKGO_PROCS   ?= 5
+GINKGO_FLAGS   ?= --silence-skips --procs=$(GINKGO_PROCS) --randomize-all $(if $(RACE),--race --trace,)
+E2E_TIMEOUT    ?= 10m
+
+# Test runner macros
+define run_tests
+	@if [ ! -f $(GINKGO) ]; then \
+		echo "-> installing ginkgo CLI..."; \
+		go install github.com/onsi/ginkgo/v2/ginkgo@latest; \
+	fi
+	@$(GINKGO) $(GINKGO_FLAGS) $(if $(2),--focus "$(2)",) $(1)
+endef
+
+define run_e2e
+	@if [ ! -f $(GINKGO) ]; then \
+		echo "-> installing ginkgo CLI..."; \
+		go install github.com/onsi/ginkgo/v2/ginkgo@latest; \
+	fi
+	@./e2e/run-tests.sh $(if $(1),--focus="$(1)",)
+endef
 
 $(CYBER_CACHE):
 	@curl -s $(CYBER_URL) > $(CYBER_CACHE)
@@ -52,28 +79,95 @@ tidy: $(CYBER_CACHE) ## Tidy go modules
 install-local: ## Build and install plugin locally for testing
 	@./scripts/install-local.sh
 
+.PHONY: install
+install: ## Uninstall and install specific version (use VERSION=xxx, e.g., VERSION=main or VERSION=v0.6.0-beta)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION is required. Usage: make install VERSION=main"; \
+		exit 1; \
+	fi
+	@echo "Uninstalling existing helm-in-pod plugin (if exists)..."
+	@helm plugin uninstall in-pod 2>/dev/null || true
+	@echo "Installing helm-in-pod version: $(VERSION)"
+	@helm plugin install https://github.com/Noksa/helm-in-pod --version=$(VERSION) --verify=false
+	@echo "Successfully installed helm-in-pod $(VERSION)"
+
 ##@ Testing
 
-$(GINKGO_BIN):
-	@go install github.com/onsi/ginkgo/v2/ginkgo@latest
+.PHONY: test-unit
+test-unit: ## Run unit tests (RACE=1 for race detection)
+	$(call run_tests,--skip-package=e2e -r)
 
 .PHONY: test
-test: $(GINKGO_BIN) ## Run tests with Ginkgo
-	@$(GINKGO_BIN) -r --silence-skips
+test: test-unit ## Run all unit tests (alias)
+
+.PHONY: test-short
+test-short: ## Run tests (short mode, skip slow tests)
+	$(call run_tests,--short --skip-package=e2e -r)
+
+.PHONY: test-focus
+test-focus: ## Run focused tests (FOCUS="pattern")
+	$(call run_tests,--skip-package=e2e -r,$(FOCUS))
 
 .PHONY: test-verbose
-test-verbose: $(GINKGO_BIN) ## Run tests with verbose output
-	@$(GINKGO_BIN) -r -v
+test-verbose: ## Run unit tests with verbose output
+	$(call run_tests,--skip-package=e2e -r -v)
 
 .PHONY: test-coverage
-test-coverage: $(GINKGO_BIN) $(CYBER_CACHE) ## Run tests with coverage
-	@$(GINKGO_BIN) -r --cover --coverprofile=coverage.out
+test-coverage: $(CYBER_CACHE) ## Run tests with coverage
+	$(call run_tests,--skip-package=e2e -r --cover --coverprofile=coverage.out)
 	@go tool cover -html=coverage.out -o coverage.html
 	@source $(CYBER_CACHE) && cyber_ok "Coverage report: $${CYBER_G}coverage.html$${CYBER_X}"
 
 .PHONY: test-plugin
 test-plugin: ## Test plugin as Helm plugin (integration test)
 	@./scripts/test-plugin.sh
+
+.PHONY: test-ci
+test-ci: ## Run tests in CI (race + randomized + reports)
+	@go run github.com/onsi/ginkgo/v2/ginkgo -r --race --trace \
+		--randomize-all --keep-going --cover --coverprofile=coverage.out \
+		--json-report=report.json --skip-package=e2e ./...
+
+##@ E2E Testing
+
+.PHONY: test-e2e-setup
+test-e2e-setup: $(CYBER_CACHE) ## Setup kind cluster for e2e tests
+	@./e2e/setup-cluster.sh
+
+.PHONY: test-e2e-teardown
+test-e2e-teardown: $(CYBER_CACHE) ## Teardown kind cluster for e2e tests
+	@./e2e/teardown-cluster.sh
+
+.PHONY: test-e2e-prepare
+test-e2e-prepare: ## Setup cluster if missing, otherwise reuse existing
+	@if kind get clusters 2>/dev/null | grep -q "^helm-in-pod-e2e$$"; then \
+		echo "Cluster exists — reusing..."; \
+		kind export kubeconfig --name helm-in-pod-e2e --kubeconfig e2e/.kubeconfig 2>/dev/null; \
+	else \
+		./e2e/setup-cluster.sh; \
+	fi
+
+.PHONY: test-e2e
+test-e2e: test-e2e-prepare ## Run e2e tests (use FOCUS="pattern" to filter)
+	$(call run_e2e,$(FOCUS))
+
+.PHONY: test-e2e-serial
+test-e2e-serial: ## Run e2e tests serially (use FOCUS="pattern" to filter)
+	@GINKGO_PROCS=1 $(MAKE) test-e2e FOCUS="$(FOCUS)"
+
+.PHONY: test-e2e-full
+test-e2e-full: test-e2e-setup test-e2e test-e2e-teardown ## Full e2e flow: setup, test, teardown
+
+.PHONY: k9s
+k9s: ## Run k9s with e2e cluster kubeconfig
+	@if [ ! -f e2e/.kubeconfig ]; then \
+		echo "E2E kubeconfig not found. Run: make test-e2e-setup"; \
+		exit 1; \
+	fi
+	@KUBECONFIG=e2e/.kubeconfig k9s
+
+.PHONY: test-all
+test-all: test-unit test-e2e ## Run all tests (unit + e2e)
 
 ##@ Build
 
@@ -84,14 +178,13 @@ build: $(CYBER_CACHE) ## Build binary for current platform
 	@source $(CYBER_CACHE) && cyber_ok "Binary: $${CYBER_G}bin/in-pod$${CYBER_X}"
 
 .PHONY: binaries
-binaries: ## Build release binaries for all platforms
-	@./scripts/make_archieve.sh
+binaries: ## Build release binaries for all platforms (use TARGET=os/arch for single platform)
+	@TARGET="$(TARGET)" ./scripts/make_archieve.sh
 
 ##@ Cleanup
 
 .PHONY: clean
 clean: $(CYBER_CACHE) ## Clean build artifacts
 	@source $(CYBER_CACHE) && cyber_log "Cleaning up"
-	@rm -rf bin/ generated/ coverage.out coverage.html
+	@rm -rf bin/ generated/ coverage.out coverage.html report.json
 	@source $(CYBER_CACHE) && cyber_ok "Cleaned"
-

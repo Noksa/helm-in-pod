@@ -11,10 +11,8 @@ import (
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/helpers"
 	"github.com/noksa/helm-in-pod/internal/logz"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"go.uber.org/multierr"
 )
 
 func newExecCmd() *cobra.Command {
@@ -25,7 +23,7 @@ func newExecCmd() *cobra.Command {
 	}
 	opts := cmdoptions.ExecOptions{}
 	addExecOptionsFlags(execCmd, &opts)
-	execCmd.RunE = func(cmd *cobra.Command, args []string) error {
+	execCmd.RunE = func(cmd *cobra.Command, args []string) (returnErr error) {
 		if len(args) == 0 {
 			return fmt.Errorf("specify command to run. Run `helm in-pod exec --help` to check available options")
 		}
@@ -39,36 +37,34 @@ func newExecCmd() *cobra.Command {
 		timeout := viper.GetDuration("timeout")
 		opts.Timeout = timeout + time.Minute*10
 
-		var mErr error
-		defer multierr.AppendInvoke(&mErr, multierr.Invoke(func() error {
-			return internal.Pod.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
-		}))
-
-		// Parse file mappings
-		if len(opts.Files) > 0 {
-			opts.FilesAsMap = map[string]string{}
-			for _, val := range opts.Files {
-				entries := strings.SplitSeq(val, ",")
-				for v := range entries {
-					splitted := strings.Split(v, ":")
-					opts.FilesAsMap[splitted[0]] = splitted[1]
-				}
-			}
+		// Handle dry-run: print pod spec and exit
+		if opts.DryRun {
+			return internal.Pod().PrintPodSpecYAML(opts, false)
 		}
 
+		defer func() {
+			cleanupErr := internal.Pod().DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
+			if cleanupErr != nil && returnErr == nil {
+				returnErr = cleanupErr
+			}
+		}()
+
+		// Parse file mappings
+		opts.ParseFileMappings()
+
 		// Prepare namespace and create pod
-		err := internal.Namespace.PrepareNs()
+		err := internal.Namespace().PrepareNs()
 		if err != nil {
 			return err
 		}
 
-		pod, err := internal.Pod.CreateHelmPod(opts)
+		pod, err := internal.Pod().CreateHelmPod(opts)
 		if err != nil {
 			return err
 		}
 
 		// Get pod user info
-		userInfo, err := internal.Pod.GetPodUserInfo(pod)
+		userInfo, err := internal.Pod().GetPodUserInfo(pod)
 		if err != nil {
 			return err
 		}
@@ -85,26 +81,59 @@ func newExecCmd() *cobra.Command {
 		}
 
 		if !helmFound {
-			log.Warnf("%v helm is not installed in the image, all helm prerequisites will be skipped. If the passed command contains helm calls, it will fail", logz.LogPod())
+			logz.Pod().Warn().Msg("helm is not installed in the image, all helm prerequisites will be skipped. If the passed command contains helm calls, it will fail")
 		}
 
 		// Sync helm repositories if needed
 		if opts.CopyRepo && helmFound {
-			err = internal.Pod.SyncHelmRepositories(pod, opts, userInfo.HomeDirectory, isHelm4)
+			err = internal.Pod().SyncHelmRepositories(pod, opts, userInfo.HomeDirectory, isHelm4)
 			if err != nil {
 				return err
 			}
 		}
 
 		// Copy user files
-		err = internal.Pod.CopyUserFiles(pod, opts, expand, nil)
+		err = internal.Pod().CopyUserFiles(pod, opts, expand, nil)
 		if err != nil {
 			return err
 		}
 
 		// Execute command
 		cmdToUse := strings.Join(args, " ")
-		return internal.Pod.ExecuteCommand(cmd.Context(), pod, cmdToUse, userInfo.HomeDirectory, opts)
+		execErr := internal.Pod().ExecuteCommand(cmd.Context(), pod, cmdToUse, userInfo.HomeDirectory, opts)
+
+		// Copy files from pod to host (even if command failed, user may want artifacts)
+		if len(opts.CopyFrom) > 0 {
+			copyFromMap, parseErr := parseCopyFromMappings(opts.CopyFrom)
+			if parseErr != nil {
+				internal.Pod().SignalCopyDone(pod)
+				if execErr != nil {
+					return execErr
+				}
+				return parseErr
+			}
+			var copyErrors []error
+			for podPath, hostPath := range copyFromMap {
+				expanded, expandErr := expand(hostPath)
+				if expandErr != nil {
+					copyErrors = append(copyErrors, expandErr)
+					continue
+				}
+				if copyErr := internal.Pod().CopyFileFromPod(pod, podPath, expanded, opts.CopyAttempts); copyErr != nil {
+					copyErrors = append(copyErrors, copyErr)
+				}
+			}
+			// Signal the pod that copy is done so it can exit
+			internal.Pod().SignalCopyDone(pod)
+			if len(copyErrors) > 0 {
+				if execErr != nil {
+					return execErr
+				}
+				return copyErrors[0]
+			}
+		}
+
+		return execErr
 	}
 	return execCmd
 }

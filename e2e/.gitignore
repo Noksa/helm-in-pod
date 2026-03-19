@@ -1,0 +1,9 @@
+# Temporary test charts
+/tmp/
+
+# Test artifacts
+*.log
+*.out
+
+# E2E kubeconfig
+.kubeconfig

@@ -11,7 +11,6 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal/logz"
-	log "github.com/sirupsen/logrus"
 )
 
 func Compress(src string, destPath string, buf io.Writer) error {
@@ -44,7 +43,7 @@ func Compress(src string, destPath string, buf io.Writer) error {
 			dir = fmt.Sprintf("%v/%v", dir, fi.Name())
 		}
 		header.Name = filepath.ToSlash(dir)
-		log.Debugf("%v %v %v will be copied to %v", logz.LogHost(), logz.LogPod(), color.CyanString(file), color.MagentaString(dir))
+		logz.HostPod().Debug().Msgf("%v will be copied to %v", color.CyanString(file), color.MagentaString(dir))
 		// write header
 		if err := tw.WriteHeader(header); err != nil {
 			return err

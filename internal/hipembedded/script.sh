@@ -44,5 +44,23 @@ done
 #echo "#### EXECUTION STARTED ####"
 "${SCRIPT_PATH}" &
 pid=$!
+set +e
 wait $pid
-exit $?
+CMD_EXIT=$?
+set -e
+
+# If WAIT_COPY_DONE is set, emit exit code marker and wait for host to signal copy completion
+if [ -n "${WAIT_COPY_DONE:-}" ]; then
+  echo "###HIP_EXIT_CODE:${CMD_EXIT}###"
+  WAIT_TIME=0
+  WAIT_END=$((WAIT_TIME+300))
+  while [ $WAIT_TIME -lt $WAIT_END ]; do
+    if [ -f /tmp/copy-done ]; then
+      break
+    fi
+    sleep 1
+    WAIT_TIME=$((WAIT_TIME+1))
+  done
+fi
+
+exit $CMD_EXIT

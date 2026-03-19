@@ -4,7 +4,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/logz"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -23,15 +22,15 @@ All Helm repositories and configurations are already set up and ready to use.`,
 				return err
 			}
 
-			log.Debugf("%s Looking for %s daemon", logz.LogHost(), color.CyanString(name))
-			pod, err := internal.Pod.GetDaemonPod(name)
+			logz.Host().Debug().Msgf("Looking for %s daemon", color.CyanString(name))
+			pod, err := internal.Pod().GetDaemonPod(name)
 			if err != nil {
 				return err
 			}
-			log.Infof("%s Opening interactive shell in %s daemon", logz.LogHost(), color.CyanString(pod.Name))
-			log.Infof("Type 'exit' or press Ctrl+D to close the shell")
+			logz.Host().Info().Msgf("Opening interactive shell in %s daemon", color.CyanString(pod.Name))
+			logz.Host().Info().Msg("Type 'exit' or press Ctrl+D to close the shell")
 
-			return internal.Pod.OpenInteractiveShell(cmd.Context(), pod, shell)
+			return internal.Pod().OpenInteractiveShell(cmd.Context(), pod, shell)
 		},
 	}
 	shellCmd.Flags().StringVar(&name, "name", "", "Daemon name (required)")

@@ -11,7 +11,6 @@ import (
 	"github.com/noksa/helm-in-pod/internal/helpers"
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/logz"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -45,28 +44,24 @@ func newDaemonStartCmd() *cobra.Command {
 			}
 			opts.Labels["daemon"] = opts.Name
 
-			if len(opts.Files) > 0 {
-				opts.FilesAsMap = map[string]string{}
-				for _, val := range opts.Files {
-					entries := strings.SplitSeq(val, ",")
-					for v := range entries {
-						splitted := strings.Split(v, ":")
-						opts.FilesAsMap[splitted[0]] = splitted[1]
-					}
-				}
+			// Handle dry-run: print pod spec and exit
+			if opts.DryRun {
+				return internal.Pod().PrintPodSpecYAML(opts.ExecOptions, true)
 			}
 
-			err = internal.Namespace.PrepareNs()
+			opts.ParseFileMappings()
+
+			err = internal.Namespace().PrepareNs()
 			if err != nil {
 				return err
 			}
 
-			pod, err := internal.Pod.CreateDaemonPod(opts)
+			pod, err := internal.Pod().CreateDaemonPod(opts)
 			if err != nil {
 				return err
 			}
 
-			userInfo, err := internal.Pod.GetPodUserInfo(pod)
+			userInfo, err := internal.Pod().GetPodUserInfo(pod)
 			if err != nil {
 				return err
 			}
@@ -82,17 +77,17 @@ func newDaemonStartCmd() *cobra.Command {
 			}
 
 			if !helmFound {
-				log.Warnf("%v helm is not installed in the image, all helm prerequisites will be skipped", logz.LogPod())
+				logz.Pod().Warn().Msg("helm is not installed in the image, all helm prerequisites will be skipped")
 			}
 
 			if opts.CopyRepo && helmFound {
-				err = internal.Pod.SyncHelmRepositories(pod, opts.ExecOptions, userInfo.HomeDirectory, isHelm4)
+				err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, userInfo.HomeDirectory, isHelm4)
 				if err != nil {
 					return err
 				}
 			}
 
-			err = internal.Pod.CopyUserFiles(pod, opts.ExecOptions, expand, nil)
+			err = internal.Pod().CopyUserFiles(pod, opts.ExecOptions, expand, nil)
 			if err != nil {
 				return err
 			}
@@ -105,12 +100,12 @@ func newDaemonStartCmd() *cobra.Command {
 			if helmFound {
 				annotations[hipconsts.AnnotationHelm4] = fmt.Sprintf("%v", isHelm4)
 			}
-			err = internal.Pod.AnnotatePod(pod, annotations)
+			err = internal.Pod().AnnotatePod(pod, annotations)
 			if err != nil {
 				return err
 			}
 
-			log.Infof("Daemon pod '%s' started successfully", color.CyanString(pod.Name))
+			logz.Host().Info().Msgf("Daemon pod '%s' started successfully", color.CyanString(pod.Name))
 			return nil
 		},
 	}

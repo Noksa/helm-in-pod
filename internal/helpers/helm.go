@@ -10,11 +10,15 @@ import (
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
 
+var helmVersionRe = regexp.MustCompile(`v(\d+)\.`)
+
 // GetHelmMajorVersion returns the major version of Helm running in the specified pod
 // Returns 0 if version cannot be determined
 func GetHelmMajorVersion(podName, podNamespace, image string) (int, error) {
+	kclient := operatorkclient.DefaultClient()
 	var stdout string
-	_, stderr, err := operatorkclient.RunCommandInPod("helm --help", hipconsts.HelmInPodNamespace, podName, podNamespace, nil)
+	_, stderr, err := kclient.ExecInPod("helm --help", hipconsts.HelmInPodNamespace, podName, podNamespace,
+		operatorkclient.WithRawCommand(true))
 	if err != nil {
 		if strings.Contains(stderr, "helm: not found") {
 			return 0, fmt.Errorf("helm is not installed in image %v", image)
@@ -22,14 +26,13 @@ func GetHelmMajorVersion(podName, podNamespace, image string) (int, error) {
 		return 0, fmt.Errorf("failed to get helm version: %v, stderr: %s", err, stderr)
 	}
 
-	stdout, stderr, err = operatorkclient.RunCommandInPod("helm version --template '{{ $.Version }}'", hipconsts.HelmInPodNamespace, podName, podNamespace, nil)
+	stdout, stderr, err = kclient.ExecInPod("helm version --template '{{ $.Version }}'", hipconsts.HelmInPodNamespace, podName, podNamespace)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get helm version: %v, stderr: %s", err, stderr)
 	}
 
 	// Extract major version from output like "v3.14.0" or "v4.0.0"
-	re := regexp.MustCompile(`v(\d+)\.`)
-	matches := re.FindStringSubmatch(stdout)
+	matches := helmVersionRe.FindStringSubmatch(stdout)
 	if len(matches) < 2 {
 		return 0, fmt.Errorf("could not parse helm version from output: %s", stdout)
 	}
