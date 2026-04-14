@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/fatih/color"
@@ -35,7 +36,9 @@ func newRootCmd() *cobra.Command {
 		if !helpers.IsCompletionCmd(cmd) {
 			logz.Host().Info().Msgf("Running %v command", color.CyanString(cmd.Name()))
 		}
-		internal.InitManagers()
+		if err := internal.InitManagers(); err != nil {
+			return fmt.Errorf("could not initialise Kubernetes client: %w", err)
+		}
 		return nil
 	}
 	rootCmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {

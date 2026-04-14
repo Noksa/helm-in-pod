@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
@@ -25,14 +26,14 @@ func buildConfigOverrides() *clientcmd.ConfigOverrides {
 	return overrides
 }
 
-func InitManagers() {
+func InitManagers() error {
 	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		clientcmd.NewDefaultClientConfigLoadingRules(),
 		buildConfigOverrides(),
 	)
 	config, err := kubeConfig.ClientConfig()
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to load kubeconfig: %w", err)
 	}
 
 	operatorkclient.SetDefaultConfig(config)
@@ -42,6 +43,7 @@ func InitManagers() {
 
 	namespace = hipns.NewManager(ctx)
 	pod = hippod.NewManager(ctx, hostname)
+	return nil
 }
 
 func Namespace() *hipns.Manager {
