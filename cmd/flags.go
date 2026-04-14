@@ -98,6 +98,7 @@ func addPodCreationFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions) {
 	cmd.Flags().StringSliceVar(&opts.Volumes, "volume", []string{}, "Mount volumes in the pod. Format: type:name:mountPath[:ro]. Types: pvc, secret, configmap, hostpath. Examples: 'pvc:my-claim:/data', 'secret:my-secret:/etc/creds:ro', 'configmap:my-cm:/etc/config', 'hostpath:/var/log:/host-logs:ro'")
 	cmd.Flags().StringVar(&opts.ServiceAccount, "service-account", "", "Service account to use in the pod (default: helm-in-pod)")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Print the pod spec as YAML without creating the pod")
+	cmd.Flags().Int64Var(&opts.ActiveDeadlineSeconds, "active-deadline-seconds", 0, "Maximum duration in seconds the pod is allowed to run. The pod will be terminated by Kubernetes once this deadline is exceeded, regardless of whether the client is still connected. Useful to avoid orphaned pods in CI/CD pipelines. 0 means no deadline (default)")
 }
 
 func addRuntimeFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions, copyRepoDefault bool) {
