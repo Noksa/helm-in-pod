@@ -222,6 +222,10 @@ func buildPodSpec(opts cmdoptions.ExecOptions, daemon bool) (corev1.PodSpec, err
 		podSpec.HostNetwork = true
 	}
 
+	if opts.ActiveDeadlineSeconds > 0 {
+		podSpec.ActiveDeadlineSeconds = gopointer.NewOf(opts.ActiveDeadlineSeconds)
+	}
+
 	return podSpec, nil
 }
 
