@@ -210,6 +210,42 @@ var _ = Describe("buildPodSpec", func() {
 			Expect(res.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("1Gi")))
 			Expect(res.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("2Gi")))
 		})
+
+		It("should return an error for invalid --cpu-request instead of panicking", func() {
+			opts := baseOpts()
+			opts.CpuRequest = "badvalue"
+			_, err := buildPodSpec(opts, false)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("--cpu-request"))
+			Expect(err.Error()).To(ContainSubstring("badvalue"))
+		})
+
+		It("should return an error for invalid --cpu-limit instead of panicking", func() {
+			opts := baseOpts()
+			opts.CpuLimit = "not-a-quantity"
+			_, err := buildPodSpec(opts, false)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("--cpu-limit"))
+			Expect(err.Error()).To(ContainSubstring("not-a-quantity"))
+		})
+
+		It("should return an error for invalid --memory-request instead of panicking", func() {
+			opts := baseOpts()
+			opts.MemoryRequest = "5ZZZ"
+			_, err := buildPodSpec(opts, false)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("--memory-request"))
+			Expect(err.Error()).To(ContainSubstring("5ZZZ"))
+		})
+
+		It("should return an error for invalid --memory-limit instead of panicking", func() {
+			opts := baseOpts()
+			opts.MemoryLimit = "xyz"
+			_, err := buildPodSpec(opts, false)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("--memory-limit"))
+			Expect(err.Error()).To(ContainSubstring("xyz"))
+		})
 	})
 
 	Context("security context", func() {
