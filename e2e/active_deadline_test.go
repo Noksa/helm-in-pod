@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"context"
 	"os/exec"
 	"strings"
 	"time"
@@ -97,7 +98,7 @@ var _ = Describe("Active Deadline Seconds Flag", func() {
 			Expect(output).To(ContainSubstring("deadline-ok"))
 		})
 
-		It("should terminate pod when active deadline expires before command completes", func() {
+		It("should terminate pod when active deadline expires before command completes", func(_ context.Context) {
 			start := time.Now()
 			cmd := BuildHelmInPodCommand(
 				"--labels", testLabel,
