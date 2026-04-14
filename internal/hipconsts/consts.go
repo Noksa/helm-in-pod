@@ -9,7 +9,8 @@ const (
 
 	EnvDaemonName = "HELM_IN_POD_DAEMON_NAME"
 
-	LabelOperationID = "helm-in-pod/operation-id"
+	LabelOperationID  = "helm-in-pod/operation-id"
+	LabelInvocationID = "helm-in-pod/invocation-id"
 
 	// Sentinel files for copy-from flow
 	CopyFromDoneFile = "/tmp/copy-done"

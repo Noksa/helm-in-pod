@@ -19,6 +19,7 @@ import (
 
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/fatih/color"
+	"github.com/google/uuid"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/helmtar"
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
@@ -35,15 +36,17 @@ import (
 const Namespace = "helm-in-pod"
 
 type Manager struct {
-	ctx         context.Context
-	myHostname  string
-	interrupted bool
+	ctx          context.Context
+	myHostname   string
+	interrupted  bool
+	invocationID string // unique per process; prevents concurrent instances from deleting each other's pods
 }
 
 func NewManager(ctx context.Context, hostname string) *Manager {
 	return &Manager{
-		ctx:        ctx,
-		myHostname: hostname,
+		ctx:          ctx,
+		myHostname:   hostname,
+		invocationID: uuid.New().String(),
 	}
 }
 func (m *Manager) client() *operatorkclient.Client {
@@ -53,12 +56,13 @@ func (m *Manager) client() *operatorkclient.Client {
 func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOptions cmdoptions.PurgeOptions) error {
 	opts := metav1.ListOptions{}
 	if !purgeOptions.All {
-		selector := fmt.Sprintf("host=%v", m.myHostname)
+		// Include the invocation ID so each process only deletes its own pods.
+		// Without this, concurrent instances on the same host would share the
+		// "host=<hostname>" selector and delete each other's pods on startup.
+		selector := fmt.Sprintf("host=%v,%v=%v", m.myHostname, hipconsts.LabelInvocationID, m.invocationID)
 		for k, v := range execOptions.Labels {
 			selector = fmt.Sprintf("%v,%v=%v", selector, k, v)
 		}
-		selector = strings.TrimSuffix(selector, ",")
-		selector = strings.TrimPrefix(selector, ",")
 		opts.LabelSelector = selector
 	}
 	pods, err := m.client().ClientSet().CoreV1().Pods(Namespace).List(context.Background(), opts)
@@ -100,8 +104,9 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	operationID := GenerateOperationID()
 
 	labels := map[string]string{
-		"host":                     m.myHostname,
-		hipconsts.LabelOperationID: operationID,
+		"host":                      m.myHostname,
+		hipconsts.LabelOperationID:  operationID,
+		hipconsts.LabelInvocationID: m.invocationID,
 	}
 	maps.Copy(labels, opts.Labels)
 	annotations := map[string]string{}
@@ -418,8 +423,9 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 	operationID := GenerateOperationID()
 
 	labels := map[string]string{
-		"daemon":                   opts.Name,
-		hipconsts.LabelOperationID: operationID,
+		"daemon":                    opts.Name,
+		hipconsts.LabelOperationID:  operationID,
+		hipconsts.LabelInvocationID: m.invocationID,
 	}
 	maps.Copy(labels, opts.Labels)
 	annotations := map[string]string{}
