@@ -123,16 +123,32 @@ func buildPodSpec(opts cmdoptions.ExecOptions, daemon bool) (corev1.PodSpec, err
 	limits := corev1.ResourceList{}
 
 	if opts.CpuRequest != "" && opts.CpuRequest != "0" {
-		requests["cpu"] = resource.MustParse(opts.CpuRequest)
+		q, err := resource.ParseQuantity(opts.CpuRequest)
+		if err != nil {
+			return corev1.PodSpec{}, fmt.Errorf("invalid --cpu-request %q: %w", opts.CpuRequest, err)
+		}
+		requests["cpu"] = q
 	}
 	if opts.CpuLimit != "" && opts.CpuLimit != "0" {
-		limits["cpu"] = resource.MustParse(opts.CpuLimit)
+		q, err := resource.ParseQuantity(opts.CpuLimit)
+		if err != nil {
+			return corev1.PodSpec{}, fmt.Errorf("invalid --cpu-limit %q: %w", opts.CpuLimit, err)
+		}
+		limits["cpu"] = q
 	}
 	if opts.MemoryRequest != "" && opts.MemoryRequest != "0" {
-		requests["memory"] = resource.MustParse(opts.MemoryRequest)
+		q, err := resource.ParseQuantity(opts.MemoryRequest)
+		if err != nil {
+			return corev1.PodSpec{}, fmt.Errorf("invalid --memory-request %q: %w", opts.MemoryRequest, err)
+		}
+		requests["memory"] = q
 	}
 	if opts.MemoryLimit != "" && opts.MemoryLimit != "0" {
-		limits["memory"] = resource.MustParse(opts.MemoryLimit)
+		q, err := resource.ParseQuantity(opts.MemoryLimit)
+		if err != nil {
+			return corev1.PodSpec{}, fmt.Errorf("invalid --memory-limit %q: %w", opts.MemoryLimit, err)
+		}
+		limits["memory"] = q
 	}
 
 	securityContext := &corev1.SecurityContext{}
