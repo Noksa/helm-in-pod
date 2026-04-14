@@ -56,10 +56,10 @@ func (m *Manager) client() *operatorkclient.Client {
 func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOptions cmdoptions.PurgeOptions) error {
 	opts := metav1.ListOptions{}
 	if !purgeOptions.All {
-		// Include the invocation ID so each process only deletes its own pods.
+		// Include the per-process operation ID so each process only deletes its own pods.
 		// Without this, concurrent instances on the same host would share the
 		// "host=<hostname>" selector and delete each other's pods on startup.
-		selector := fmt.Sprintf("host=%v,%v=%v", m.myHostname, hipconsts.LabelInvocationID, m.invocationID)
+		selector := fmt.Sprintf("host=%v,%v=%v", m.myHostname, hipconsts.LabelOperationID, m.invocationID)
 		for k, v := range execOptions.Labels {
 			selector = fmt.Sprintf("%v,%v=%v", selector, k, v)
 		}
@@ -100,13 +100,9 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 		return nil, err
 	}
 
-	// Generate unique operation ID for this pod
-	operationID := GenerateOperationID()
-
 	labels := map[string]string{
-		"host":                      m.myHostname,
-		hipconsts.LabelOperationID:  operationID,
-		hipconsts.LabelInvocationID: m.invocationID,
+		"host":                     m.myHostname,
+		hipconsts.LabelOperationID: m.invocationID,
 	}
 	maps.Copy(labels, opts.Labels)
 	annotations := map[string]string{}
@@ -126,7 +122,7 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 
 	// Create PodDisruptionBudget for this pod if enabled
 	if opts.CreatePDB {
-		if err := m.CreatePodDisruptionBudget(m.ctx, operationID); err != nil {
+		if err := m.CreatePodDisruptionBudget(m.ctx, m.invocationID); err != nil {
 			// If PDB creation fails, clean up the pod
 			_ = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{})
 			return nil, fmt.Errorf("failed to create PodDisruptionBudget: %w", err)
@@ -146,7 +142,7 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 			}
 			// Clean up PDB if it was created
 			if opts.CreatePDB {
-				_ = m.DeletePodDisruptionBudgets(m.ctx, operationID)
+				_ = m.DeletePodDisruptionBudgets(m.ctx, m.invocationID)
 			}
 			m.interrupted = true
 		}
@@ -419,13 +415,9 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 		return nil, err
 	}
 
-	// Generate unique operation ID for this daemon pod
-	operationID := GenerateOperationID()
-
 	labels := map[string]string{
-		"daemon":                    opts.Name,
-		hipconsts.LabelOperationID:  operationID,
-		hipconsts.LabelInvocationID: m.invocationID,
+		"daemon":                   opts.Name,
+		hipconsts.LabelOperationID: m.invocationID,
 	}
 	maps.Copy(labels, opts.Labels)
 	annotations := map[string]string{}
@@ -445,7 +437,7 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 
 	// Create PodDisruptionBudget for this daemon pod if enabled
 	if opts.CreatePDB {
-		if err := m.CreatePodDisruptionBudget(m.ctx, operationID); err != nil {
+		if err := m.CreatePodDisruptionBudget(m.ctx, m.invocationID); err != nil {
 			// If PDB creation fails, clean up the pod
 			_ = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{})
 			return nil, fmt.Errorf("failed to create PodDisruptionBudget: %w", err)

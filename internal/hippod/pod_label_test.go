@@ -17,7 +17,7 @@ func buildLabelSelector(hostname, invocationID string, execOptions cmdoptions.Ex
 		return ""
 	}
 
-	selector := fmt.Sprintf("host=%v,%v=%v", hostname, hipconsts.LabelInvocationID, invocationID)
+	selector := fmt.Sprintf("host=%v,%v=%v", hostname, hipconsts.LabelOperationID, invocationID)
 	for k, v := range execOptions.Labels {
 		selector = fmt.Sprintf("%v,%v=%v", selector, k, v)
 	}
@@ -41,7 +41,7 @@ var _ = Describe("DeleteHelmPods Label Selector Logic", func() {
 
 			selector := buildLabelSelector(hostname, "inv-uuid-1", execOptions, false)
 			Expect(selector).To(ContainSubstring("host=test-host"))
-			Expect(selector).To(ContainSubstring(hipconsts.LabelInvocationID + "=inv-uuid-1"))
+			Expect(selector).To(ContainSubstring(hipconsts.LabelOperationID + "=inv-uuid-1"))
 			Expect(selector).To(ContainSubstring("test-id=abc123"))
 		})
 
@@ -56,7 +56,7 @@ var _ = Describe("DeleteHelmPods Label Selector Logic", func() {
 
 			selector := buildLabelSelector(hostname, "inv-uuid-2", execOptions, false)
 			Expect(selector).To(ContainSubstring("host=test-host"))
-			Expect(selector).To(ContainSubstring(hipconsts.LabelInvocationID + "=inv-uuid-2"))
+			Expect(selector).To(ContainSubstring(hipconsts.LabelOperationID + "=inv-uuid-2"))
 			Expect(selector).To(ContainSubstring("test-id=xyz789"))
 			Expect(selector).To(ContainSubstring("env=test"))
 			Expect(selector).To(ContainSubstring("team=platform"))
@@ -69,7 +69,7 @@ var _ = Describe("DeleteHelmPods Label Selector Logic", func() {
 
 			selector := buildLabelSelector(hostname, "inv-uuid-3", execOptions, false)
 			Expect(selector).To(ContainSubstring("host=test-host"))
-			Expect(selector).To(ContainSubstring(hipconsts.LabelInvocationID + "=inv-uuid-3"))
+			Expect(selector).To(ContainSubstring(hipconsts.LabelOperationID + "=inv-uuid-3"))
 		})
 
 		It("should return empty selector when purge all is true", func() {
