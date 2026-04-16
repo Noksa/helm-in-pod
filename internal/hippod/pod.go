@@ -102,6 +102,7 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	labels := map[string]string{
 		"host":                     m.myHostname,
 		hipconsts.LabelOperationID: operationID,
+		hipconsts.LabelManagedBy:   Namespace,
 	}
 	maps.Copy(labels, opts.Labels)
 	annotations := map[string]string{}
@@ -420,6 +421,7 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 	labels := map[string]string{
 		"daemon":                   opts.Name,
 		hipconsts.LabelOperationID: operationID,
+		hipconsts.LabelManagedBy:   Namespace,
 	}
 	maps.Copy(labels, opts.Labels)
 	annotations := map[string]string{}
@@ -549,7 +551,8 @@ func (m *Manager) PrintPodSpecYAML(opts cmdoptions.ExecOptions, isDaemon bool) e
 			GenerateName: fmt.Sprintf("%v-", Namespace),
 			Namespace:    Namespace,
 			Labels: map[string]string{
-				"host": m.myHostname,
+				"host":                   m.myHostname,
+				hipconsts.LabelManagedBy: Namespace,
 			},
 			Annotations: maps.Clone(opts.Annotations),
 		},
