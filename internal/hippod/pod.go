@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -37,7 +38,7 @@ const Namespace = "helm-in-pod"
 type Manager struct {
 	ctx         context.Context
 	myHostname  string
-	interrupted bool
+	interrupted atomic.Bool
 }
 
 func NewManager(ctx context.Context, hostname string) *Manager {
@@ -129,11 +130,21 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 		}
 	}
 
-	// Handle interrupt signals
+	// Handle interrupt signals. done is closed when CreateHelmPod returns so
+	// the goroutine exits promptly and does not leak across invocations.
+	done := make(chan struct{})
+	defer close(done)
+
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(c)
+
 	go func() {
-		<-c
+		select {
+		case <-done:
+			return
+		case <-c:
+		}
 		if pod != nil && pod.Name != "" {
 			logz.Host().Warn().Msg("Interrupted! Destroying helm pod")
 			destroyErr := m.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
@@ -144,10 +155,14 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 			if opts.CreatePDB {
 				_ = m.DeletePodDisruptionBudgets(m.ctx, operationID)
 			}
-			m.interrupted = true
+			m.interrupted.Store(true)
 		}
-		<-c
-		os.Exit(1)
+		select {
+		case <-done:
+			return
+		case <-c:
+			os.Exit(1)
+		}
 	}()
 
 	logz.Host().Debug().Msgf("%v pod has been created", color.MagentaString(pod.Name))
@@ -158,7 +173,7 @@ func (m *Manager) waitUntilPodIsRunning(pod *corev1.Pod) error {
 	logz.Host().Info().Msgf("Waiting until %v pod is ready", color.MagentaString(pod.Name))
 
 	err := wait.PollUntilContextTimeout(m.ctx, time.Second, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
-		if m.interrupted {
+		if m.interrupted.Load() {
 			return false, fmt.Errorf("interrupted while was waiting for pod readiness")
 		}
 
@@ -183,7 +198,7 @@ func (m *Manager) waitUntilPodIsDeleted(podName string) error {
 	logz.Host().Debug().Msgf("Waiting for pod %v to be deleted", color.CyanString(podName))
 
 	err := wait.PollUntilContextTimeout(m.ctx, time.Second, 2*time.Minute, true, func(ctx context.Context) (bool, error) {
-		if m.interrupted {
+		if m.interrupted.Load() {
 			return false, fmt.Errorf("interrupted while waiting for pod deletion")
 		}
 
