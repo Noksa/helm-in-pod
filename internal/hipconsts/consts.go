@@ -10,6 +10,7 @@ const (
 	EnvDaemonName = "HELM_IN_POD_DAEMON_NAME"
 
 	LabelOperationID = "helm-in-pod/operation-id"
+	LabelManagedBy   = "app.kubernetes.io/managed-by"
 
 	// Sentinel files for copy-from flow
 	CopyFromDoneFile = "/tmp/copy-done"

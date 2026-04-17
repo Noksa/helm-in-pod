@@ -165,6 +165,7 @@ helm in-pod exec [FLAGS] -- "COMMAND"
 | `--volume`            |       | Mount volumes in the pod (repeatable). Format: `type:name:mountPath[:ro]`. Types: `pvc`, `secret`, `configmap`, `hostpath` |
 | `--service-account`   |       | Service account for the pod (default: `helm-in-pod`)                         |
 | `--dry-run`           |       | Print the pod spec as YAML without creating anything                         |
+| `--active-deadline-seconds` | | Maximum duration in seconds the pod is allowed to run. Kubernetes terminates the pod once this deadline is exceeded, regardless of whether the client is still connected. Useful to avoid orphaned pods in CI/CD pipelines. `0` means no deadline (default) |
 
 <details>
 <summary>⚠️ <strong>Deprecated Flags</strong></summary>
@@ -501,6 +502,38 @@ helm in-pod daemon start --name dev --dry-run \
   --service-account my-sa \
   --copy-repo
 ```
+
+</details>
+
+### ⏱️ Active Deadline
+
+<details>
+<summary><strong>Prevent orphaned pods in CI/CD pipelines</strong></summary>
+
+When a CI/CD job is cancelled, an SSH session closes, or a machine crashes mid-execution, the pod created by `helm in-pod` may be left running indefinitely. `--active-deadline-seconds` sets a hard time limit enforced by Kubernetes itself — the pod is terminated once the deadline is exceeded, regardless of client connectivity.
+
+```bash
+# Terminate the pod after 30 minutes (1800s) if still running
+helm in-pod exec --active-deadline-seconds 1800 -- "helm upgrade --install myapp repo/chart"
+
+# Use in CI/CD pipeline to protect against hung jobs
+helm in-pod exec \
+  --active-deadline-seconds 3600 \
+  --copy-repo \
+  -- "helm upgrade --install myapp repo/chart -f values.yaml"
+
+# Preview the pod spec with the deadline set
+helm in-pod exec \
+  --dry-run \
+  --active-deadline-seconds 1800 \
+  -- "helm upgrade --install myapp repo/chart"
+
+# Also works with daemon mode
+helm in-pod daemon start --name ci-daemon \
+  --active-deadline-seconds 7200
+```
+
+> **Note**: `--active-deadline-seconds` limits total pod lifetime. For limiting command execution time only, use `--timeout` instead. Both flags can be combined: `--timeout` kills the command while `--active-deadline-seconds` kills the pod.
 
 </details>
 
