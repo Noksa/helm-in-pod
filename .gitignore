@@ -9,3 +9,4 @@ coverage.html
 .helm-plugin-dev/
 *.test
 *.coverprofile
+RELEASE_NOTES.md
