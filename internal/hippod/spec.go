@@ -12,6 +12,7 @@ import (
 	"github.com/noksa/helm-in-pod/internal/hipembedded"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // parseVolume parses a volume string in format: type:name:mountPath[:readOnly]
@@ -240,6 +241,22 @@ func buildPodSpec(opts cmdoptions.ExecOptions, daemon bool) (corev1.PodSpec, err
 
 	if opts.ActiveDeadlineSeconds > 0 {
 		podSpec.ActiveDeadlineSeconds = gopointer.NewOf(opts.ActiveDeadlineSeconds)
+	}
+
+	// Spread ephemeral pods across nodes to avoid concentrating kubelet API
+	// calls on a single node, which reduces NodeRestriction admission denials
+	// caused by the NodeAuthorizer graph lag on high-throughput CI/CD clusters.
+	podSpec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{
+		{
+			MaxSkew:           1,
+			TopologyKey:       "kubernetes.io/hostname",
+			WhenUnsatisfiable: corev1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					hipconsts.LabelManagedBy: Namespace,
+				},
+			},
+		},
 	}
 
 	return podSpec, nil
