@@ -20,7 +20,7 @@ mkdir -p "$INSTALL_DIR/bin"
 
 cat > "$INSTALL_DIR/plugin.yaml" << EOF
 name: "in-pod"
-version: "dev"
+version: "0.0.0-dev"
 usage: "Run any command using privileged pod in a k8s cluster"
 description: "Run any command using privileged pod in a k8s cluster"
 command: "\$HELM_PLUGIN_DIR/bin/in-pod"
