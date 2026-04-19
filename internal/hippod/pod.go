@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -38,7 +39,7 @@ const Namespace = "helm-in-pod"
 type Manager struct {
 	ctx          context.Context
 	myHostname   string
-	interrupted  bool
+	interrupted  atomic.Bool
 	invocationID string // unique per process; prevents concurrent instances from deleting each other's pods
 }
 
@@ -144,7 +145,7 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 			if opts.CreatePDB {
 				_ = m.DeletePodDisruptionBudgets(m.ctx, m.invocationID)
 			}
-			m.interrupted = true
+			m.interrupted.Store(true)
 		}
 		<-c
 		os.Exit(1)
@@ -158,7 +159,7 @@ func (m *Manager) waitUntilPodIsRunning(pod *corev1.Pod) error {
 	logz.Host().Info().Msgf("Waiting until %v pod is ready", color.MagentaString(pod.Name))
 
 	err := wait.PollUntilContextTimeout(m.ctx, time.Second, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
-		if m.interrupted {
+		if m.interrupted.Load() {
 			return false, fmt.Errorf("interrupted while was waiting for pod readiness")
 		}
 
@@ -183,7 +184,7 @@ func (m *Manager) waitUntilPodIsDeleted(podName string) error {
 	logz.Host().Debug().Msgf("Waiting for pod %v to be deleted", color.CyanString(podName))
 
 	err := wait.PollUntilContextTimeout(m.ctx, time.Second, 2*time.Minute, true, func(ctx context.Context) (bool, error) {
-		if m.interrupted {
+		if m.interrupted.Load() {
 			return false, fmt.Errorf("interrupted while waiting for pod deletion")
 		}
 
