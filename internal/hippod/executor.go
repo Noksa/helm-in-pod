@@ -237,9 +237,9 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 	// StreamLogsFromPod call once the marker is detected.
 	var mw *exitCodeMarkerWriter
 	var cancelStream context.CancelFunc
-	streamCtx := context.Background()
+	streamCtx := ctx
 	if copyFromMode {
-		streamCtx, cancelStream = context.WithCancel(streamCtx)
+		streamCtx, cancelStream = context.WithCancel(ctx)
 		defer cancelStream()
 		mw = newExitCodeMarkerWriter(io.MultiWriter(os.Stdout, b), cancelStream)
 		logWriter = mw
@@ -264,16 +264,19 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 	wg := sync.WaitGroup{}
 	wg.Go(func() {
 		for {
-			phase, err := m.GetPodPhase(context.Background(), pod)
+			phase, err := m.GetPodPhase(ctx, pod)
 			if err != nil {
 				if client.IgnoreNotFound(err) == nil {
+					return
+				}
+				if ctx.Err() != nil {
 					return
 				}
 				time.Sleep(time.Millisecond * 25)
 				continue
 			}
 			if phase == corev1.PodFailed || phase == corev1.PodSucceeded {
-				_ = m.StreamLogsFromPod(context.Background(), pod, logWriter, since)
+				_ = m.StreamLogsFromPod(ctx, pod, logWriter, since)
 				return
 			}
 			err = m.StreamLogsFromPod(streamCtx, pod, logWriter, since)
@@ -383,8 +386,8 @@ func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) err
 
 	var phase corev1.PodPhase
 
-	err := wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 60*time.Second, true, func(_ context.Context) (bool, error) {
-		p, getErr := m.GetPodPhase(context.Background(), pod)
+	err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 60*time.Second, true, func(pollCtx context.Context) (bool, error) {
+		p, getErr := m.GetPodPhase(pollCtx, pod)
 		if getErr != nil {
 			return false, nil
 		}
@@ -416,7 +419,7 @@ func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) err
 // getContainerExitCode retrieves the exit code from the pod's container status.
 // Returns ExitCodeUnknown if the exit code cannot be determined.
 func (m *Manager) getContainerExitCode(pod *corev1.Pod) int32 {
-	myPod, err := m.client().ClientSet().CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
+	myPod, err := m.client().ClientSet().CoreV1().Pods(pod.Namespace).Get(m.ctx, pod.Name, metav1.GetOptions{})
 	if err != nil {
 		return hiperrors.ExitCodeUnknown
 	}
