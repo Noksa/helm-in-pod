@@ -20,6 +20,7 @@ import (
 
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/fatih/color"
+	"github.com/google/uuid"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/helmtar"
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
@@ -36,15 +37,17 @@ import (
 const Namespace = "helm-in-pod"
 
 type Manager struct {
-	ctx         context.Context
-	myHostname  string
-	interrupted atomic.Bool
+	ctx          context.Context
+	myHostname   string
+	interrupted  atomic.Bool
+	invocationID string // unique per process; prevents concurrent instances from deleting each other's pods
 }
 
 func NewManager(ctx context.Context, hostname string) *Manager {
 	return &Manager{
-		ctx:        ctx,
-		myHostname: hostname,
+		ctx:          ctx,
+		myHostname:   hostname,
+		invocationID: uuid.New().String(),
 	}
 }
 func (m *Manager) client() *operatorkclient.Client {
@@ -54,15 +57,16 @@ func (m *Manager) client() *operatorkclient.Client {
 func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOptions cmdoptions.PurgeOptions) error {
 	opts := metav1.ListOptions{}
 	if !purgeOptions.All {
-		selector := fmt.Sprintf("host=%v", m.myHostname)
+		// Include the per-process operation ID so each process only deletes its own pods.
+		// Without this, concurrent instances on the same host would share the
+		// "host=<hostname>" selector and delete each other's pods on startup.
+		selector := fmt.Sprintf("host=%v,%v=%v", m.myHostname, hipconsts.LabelOperationID, m.invocationID)
 		for k, v := range execOptions.Labels {
 			selector = fmt.Sprintf("%v,%v=%v", selector, k, v)
 		}
-		selector = strings.TrimSuffix(selector, ",")
-		selector = strings.TrimPrefix(selector, ",")
 		opts.LabelSelector = selector
 	}
-	pods, err := m.client().ClientSet().CoreV1().Pods(Namespace).List(context.Background(), opts)
+	pods, err := m.client().ClientSet().CoreV1().Pods(Namespace).List(m.ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -71,12 +75,21 @@ func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOption
 
 		// Extract operation ID from pod labels and delete associated PDB
 		if operationID, ok := pod.Labels[hipconsts.LabelOperationID]; ok {
-			if err := m.DeletePodDisruptionBudgets(context.Background(), operationID); err != nil {
+			if err := m.DeletePodDisruptionBudgets(m.ctx, operationID); err != nil {
 				logz.Host().Warn().Msgf("Failed to delete PodDisruptionBudget for operation %s: %v", operationID, err)
 			}
 		}
 
-		err = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(context.Background(), pod.Name, metav1.DeleteOptions{})
+		// Only force-delete pods that have already terminated. For pods still
+		// in Running/Pending phase, respect the default grace period so the
+		// kubelet can complete container shutdown and avoid orphaned containers.
+		deleteOpts := metav1.DeleteOptions{}
+		if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+			zero := int64(0)
+			deleteOpts.GracePeriodSeconds = &zero
+		}
+
+		err = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, deleteOpts)
 		if err != nil {
 			return err
 		}
@@ -97,12 +110,9 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 		return nil, err
 	}
 
-	// Generate unique operation ID for this pod
-	operationID := GenerateOperationID()
-
 	labels := map[string]string{
 		"host":                     m.myHostname,
-		hipconsts.LabelOperationID: operationID,
+		hipconsts.LabelOperationID: m.invocationID,
 		hipconsts.LabelManagedBy:   Namespace,
 	}
 	maps.Copy(labels, opts.Labels)
@@ -123,9 +133,12 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 
 	// Create PodDisruptionBudget for this pod if enabled
 	if opts.CreatePDB {
-		if err := m.CreatePodDisruptionBudget(m.ctx, operationID); err != nil {
-			// If PDB creation fails, clean up the pod
-			_ = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{})
+		if err := m.CreatePodDisruptionBudget(m.ctx, m.invocationID); err != nil {
+			// If PDB creation fails, clean up the pod immediately
+			zero := int64(0)
+			_ = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{
+				GracePeriodSeconds: &zero,
+			})
 			return nil, fmt.Errorf("failed to create PodDisruptionBudget: %w", err)
 		}
 	}
@@ -153,7 +166,7 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 			}
 			// Clean up PDB if it was created
 			if opts.CreatePDB {
-				_ = m.DeletePodDisruptionBudgets(m.ctx, operationID)
+				_ = m.DeletePodDisruptionBudgets(m.ctx, m.invocationID)
 			}
 			m.interrupted.Store(true)
 		}
@@ -430,12 +443,9 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 		return nil, err
 	}
 
-	// Generate unique operation ID for this daemon pod
-	operationID := GenerateOperationID()
-
 	labels := map[string]string{
 		"daemon":                   opts.Name,
-		hipconsts.LabelOperationID: operationID,
+		hipconsts.LabelOperationID: m.invocationID,
 		hipconsts.LabelManagedBy:   Namespace,
 	}
 	maps.Copy(labels, opts.Labels)
@@ -456,9 +466,12 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 
 	// Create PodDisruptionBudget for this daemon pod if enabled
 	if opts.CreatePDB {
-		if err := m.CreatePodDisruptionBudget(m.ctx, operationID); err != nil {
-			// If PDB creation fails, clean up the pod
-			_ = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{})
+		if err := m.CreatePodDisruptionBudget(m.ctx, m.invocationID); err != nil {
+			// If PDB creation fails, clean up the pod immediately
+			zero := int64(0)
+			_ = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{
+				GracePeriodSeconds: &zero,
+			})
 			return nil, fmt.Errorf("failed to create PodDisruptionBudget: %w", err)
 		}
 	}
