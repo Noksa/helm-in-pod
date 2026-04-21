@@ -19,7 +19,12 @@ func newExecCmd() *cobra.Command {
 	execCmd := &cobra.Command{
 		Use:     "exec [flags] -- <command_to_run>",
 		Aliases: []string{"run"},
-		Short:   "Executes commands in a pod inside k8s cluster",
+		Short:   "Execute a command in a one-shot pod",
+		Long: `Create a temporary pod in the cluster, execute the specified command, and clean up.
+
+Helm repositories are synced from the host automatically (disable with --copy-repo=false).
+Files can be copied to the pod before execution and back to the host after.
+The pod is deleted after the command completes, even on failure.`,
 	}
 	opts := cmdoptions.ExecOptions{}
 	addExecOptionsFlags(execCmd, &opts)

@@ -16,7 +16,7 @@ import (
 func newRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "in-pod",
-		Short: "Run helm commands in a pod",
+		Short: "Run any command inside a Kubernetes cluster",
 	}
 	rootCmd.AddCommand(
 		newExecCmd(),
@@ -26,7 +26,7 @@ func newRootCmd() *cobra.Command {
 	startTime := time.Now()
 	var debug bool
 	rootCmd.PersistentFlags().BoolVar(&debug, "verbose-logs", false, "Enable debug logs")
-	rootCmd.PersistentFlags().Duration("timeout", time.Second*0, "After timeout a command will be gracefully terminated even if it is still running. Default is 2h")
+	rootCmd.PersistentFlags().Duration("timeout", time.Second*0, "Gracefully terminate the command after this duration (default: 2h at runtime). For exec and daemon start, 10 extra minutes are added internally for pod operations")
 	_ = viper.BindPFlag("timeout", rootCmd.PersistentFlags().Lookup("timeout"))
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if debug {

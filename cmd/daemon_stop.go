@@ -12,7 +12,7 @@ func newDaemonStopCmd() *cobra.Command {
 	var name string
 	stopCmd := &cobra.Command{
 		Use:   "stop",
-		Short: "Stop a daemon pod",
+		Short: "Stop and delete a daemon pod",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var err error
 			name, err = getDaemonName(name)

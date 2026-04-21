@@ -11,10 +11,10 @@ import (
 func newPurgeCmd() *cobra.Command {
 	purgeCmd := &cobra.Command{
 		Use:   "purge",
-		Short: "Removes remaining pods/garbage/etc in a k8s cluster",
+		Short: "Remove leftover pods and cluster resources created by the plugin",
 	}
 	opts := cmdoptions.PurgeOptions{}
-	purgeCmd.Flags().BoolVar(&opts.All, "all", false, "Removes all things which were created in a k8s cluster")
+	purgeCmd.Flags().BoolVar(&opts.All, "all", false, "Remove all pods in the helm-in-pod namespace (regardless of host), associated PDBs, and the ClusterRoleBinding")
 	purgeCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return errors.Join(
 			internal.Namespace().DeleteClusterRoleBinding(),

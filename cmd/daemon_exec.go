@@ -18,7 +18,7 @@ func newDaemonExecCmd() *cobra.Command {
 	opts := cmdoptions.DaemonOptions{}
 	execCmd := &cobra.Command{
 		Use:   "exec [flags] -- <command_to_run>",
-		Short: "Execute command in a daemon pod",
+		Short: "Execute a command in a running daemon pod",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var err error
 			opts.Name, err = getDaemonName(opts.Name)
@@ -111,7 +111,7 @@ func newDaemonExecCmd() *cobra.Command {
 	}
 	execCmd.Flags().StringVar(&opts.Name, "name", "", "Daemon name (required)")
 	execCmd.Flags().BoolVar(&opts.UpdateAllRepos, "update-all-repos", false, "Update all helm repositories without copying them")
-	execCmd.Flags().StringSliceVar(&opts.Clean, "clean", []string{}, "Paths to delete before copying files")
+	execCmd.Flags().StringSliceVar(&opts.Clean, "clean", []string{}, "Paths to delete in the pod before copying files")
 	addRuntimeFlags(execCmd, &opts.ExecOptions, false)
 	return execCmd
 }

@@ -19,7 +19,11 @@ func newDaemonStartCmd() *cobra.Command {
 	opts := cmdoptions.DaemonOptions{}
 	startCmd := &cobra.Command{
 		Use:   "start",
-		Short: "Start a daemon pod",
+		Short: "Start a persistent daemon pod for repeated command execution",
+		Long: `Create a long-running pod that stays alive for executing multiple commands without pod recreation overhead.
+
+Helm repositories are synced from the host automatically (disable with --copy-repo=false).
+Use 'daemon exec' to run commands and 'daemon stop' to tear down the pod.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var err error
 			opts.Name, err = getDaemonName(opts.Name)

@@ -7,7 +7,7 @@ import (
 func newDaemonCmd() *cobra.Command {
 	daemonCmd := &cobra.Command{
 		Use:   "daemon",
-		Short: "Manage long-running pods in the cluster",
+		Short: "Manage persistent pods for repeated command execution",
 	}
 	daemonCmd.AddCommand(
 		newDaemonStartCmd(),

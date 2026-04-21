@@ -71,10 +71,10 @@ func validateResourceFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions) err
 }
 
 func addPodCreationFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions) {
-	cmd.Flags().Int64Var(&opts.RunAsUser, "run-as-user", -1, "Run as user ID to be set in security context. Omitted if not specified and default from an image is used")
-	cmd.Flags().Int64Var(&opts.RunAsGroup, "run-as-group", -1, "Run as group ID to be set in security context. Omitted if not specified and default from an image is used")
-	cmd.Flags().StringToStringVar(&opts.Labels, "labels", map[string]string{}, "Additional labels to be set on a pod")
-	cmd.Flags().StringToStringVar(&opts.Annotations, "annotations", map[string]string{}, "Additional annotations to be set on a pod")
+	cmd.Flags().Int64Var(&opts.RunAsUser, "run-as-user", -1, "Security context user ID. Omitted if not set, using the image default")
+	cmd.Flags().Int64Var(&opts.RunAsGroup, "run-as-group", -1, "Security context group ID. Omitted if not set, using the image default")
+	cmd.Flags().StringToStringVar(&opts.Labels, "labels", map[string]string{}, "Additional labels for the pod")
+	cmd.Flags().StringToStringVar(&opts.Annotations, "annotations", map[string]string{}, "Additional annotations for the pod")
 	cmd.Flags().BoolVar(&opts.CreatePDB, "create-pdb", true, "Create PodDisruptionBudget to protect the pod from voluntary disruptions during operations")
 
 	// Deprecated flags
@@ -84,17 +84,17 @@ func addPodCreationFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions) {
 	_ = cmd.Flags().MarkDeprecated("memory", "use --memory-request and --memory-limit instead")
 
 	// New flags for separate requests and limits
-	cmd.Flags().StringVar(&opts.CpuRequest, "cpu-request", "", "Pod's cpu request")
-	cmd.Flags().StringVar(&opts.CpuLimit, "cpu-limit", "", "Pod's cpu limit (optional)")
-	cmd.Flags().StringVar(&opts.MemoryRequest, "memory-request", "", "Pod's memory request")
-	cmd.Flags().StringVar(&opts.MemoryLimit, "memory-limit", "", "Pod's memory limit (optional)")
+	cmd.Flags().StringVar(&opts.CpuRequest, "cpu-request", "", "Pod's CPU request (default: 1100m)")
+	cmd.Flags().StringVar(&opts.CpuLimit, "cpu-limit", "", "Pod's CPU limit (default: 1100m)")
+	cmd.Flags().StringVar(&opts.MemoryRequest, "memory-request", "", "Pod's memory request (default: 500Mi)")
+	cmd.Flags().StringVar(&opts.MemoryLimit, "memory-limit", "", "Pod's memory limit (default: 500Mi)")
 
-	cmd.Flags().BoolVar(&opts.HostNetwork, "host-network", false, "Use host network in a pod")
-	cmd.Flags().StringSliceVar(&opts.Tolerations, "tolerations", []string{}, "Pod's tolerations in format key=value:effect:operator. Examples: '::Exists' (all taints), 'key=::Exists' (key with any effect), 'key=:NoSchedule:Exists', 'key=value:NoSchedule:Equal'")
-	cmd.Flags().StringToStringVar(&opts.NodeSelector, "node-selector", map[string]string{}, "Pod's node selectors. Examples: 'node-role.kubernetes.io/control-plane=\"\"', 'disktype=ssd'")
-	cmd.Flags().StringVar(&opts.ImagePullSecret, "image-pull-secret", "", "Specify an image pull secret which should be used to pull --image from private repository")
-	cmd.Flags().StringVar(&opts.PullPolicy, "pull-policy", "IfNotPresent", "Image pull policy to use in helm pod")
-	cmd.Flags().StringVarP(&opts.Image, "image", "i", "docker.io/noksa/kubectl-helm:v1.34.5-v4.1.1", "An image which will be used")
+	cmd.Flags().BoolVar(&opts.HostNetwork, "host-network", false, "Use host network in the pod")
+	cmd.Flags().StringSliceVar(&opts.Tolerations, "tolerations", []string{}, "Pod tolerations in format key=value:effect:operator. Examples: '::Exists' (all taints), 'key=::Exists' (key with any effect), 'key=:NoSchedule:Exists', 'key=value:NoSchedule:Equal'")
+	cmd.Flags().StringToStringVar(&opts.NodeSelector, "node-selector", map[string]string{}, "Pod node selectors. Examples: 'node-role.kubernetes.io/control-plane=\"\"', 'disktype=ssd'")
+	cmd.Flags().StringVar(&opts.ImagePullSecret, "image-pull-secret", "", "Image pull secret for pulling from a private registry")
+	cmd.Flags().StringVar(&opts.PullPolicy, "pull-policy", "IfNotPresent", "Image pull policy for the pod")
+	cmd.Flags().StringVarP(&opts.Image, "image", "i", "docker.io/noksa/kubectl-helm:v1.34.5-v4.1.1", "Docker image to use for the pod")
 	cmd.Flags().StringSliceVar(&opts.Volumes, "volume", []string{}, "Mount volumes in the pod. Format: type:name:mountPath[:ro]. Types: pvc, secret, configmap, hostpath. Examples: 'pvc:my-claim:/data', 'secret:my-secret:/etc/creds:ro', 'configmap:my-cm:/etc/config', 'hostpath:/var/log:/host-logs:ro'")
 	cmd.Flags().StringVar(&opts.ServiceAccount, "service-account", "", "Service account to use in the pod (default: helm-in-pod)")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Print the pod spec as YAML without creating the pod")
@@ -102,14 +102,14 @@ func addPodCreationFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions) {
 }
 
 func addRuntimeFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions, copyRepoDefault bool) {
-	cmd.Flags().StringToStringVarP(&opts.Env, "env", "e", map[string]string{}, "Environment variables to be set in helm's pod before running a command")
-	cmd.Flags().StringSliceVarP(&opts.SubstEnv, "subst-env", "s", []string{}, "Environment variables to be substituted in helm's pod (WITHOUT values). Values will be substituted from exported env on host")
-	cmd.Flags().BoolVar(&opts.CopyRepo, "copy-repo", copyRepoDefault, "Copy existing helm repositories to helm pod")
-	cmd.Flags().StringSliceVar(&opts.UpdateRepo, "update-repo", []string{}, "A list of helm repository aliases which should be updated before running a command. Applicable only if --copy-repo set to true. All repositories will be updated if not specified")
-	cmd.Flags().StringSliceVarP(&opts.Files, "copy", "c", []string{}, "A map of files/directories which should be copied from host to container. Can be specified multiple times. Example: -c /path_on_host/values.yaml:/path_in_container/values.yaml")
-	cmd.Flags().IntVar(&opts.CopyAttempts, "copy-attempts", 3, "Attempts count in each copy action (in copy-repo and copy flags). If your connection to k8s api is no stable, you can try to increase the attempts")
-	cmd.Flags().IntVar(&opts.UpdateRepoAttempts, "update-repo-attempts", 3, "Attempts count in each helm update repo action. Applicable only if copy-repo set to true")
-	cmd.Flags().StringSliceVar(&opts.CopyFrom, "copy-from", []string{}, "Copy files/directories from pod to host after command execution. Format: /path_in_pod:/path_on_host. Example: --copy-from /tmp/output.yaml:./output.yaml")
+	cmd.Flags().StringToStringVarP(&opts.Env, "env", "e", map[string]string{}, "Environment variables to set in the pod before running the command")
+	cmd.Flags().StringSliceVarP(&opts.SubstEnv, "subst-env", "s", []string{}, "Forward environment variables from the host to the pod by name (values are resolved from the host). Example: -s HELM_DRIVER,HELM_DRIVER_SQL_CONNECTION_STRING")
+	cmd.Flags().BoolVar(&opts.CopyRepo, "copy-repo", copyRepoDefault, "Copy Helm repositories from the host to the pod")
+	cmd.Flags().StringSliceVar(&opts.UpdateRepo, "update-repo", []string{}, "Helm repository aliases to update in the pod after copying. Requires --copy-repo. If specified without values, all repositories are updated")
+	cmd.Flags().StringSliceVarP(&opts.Files, "copy", "c", []string{}, "Copy files/directories from host to pod. Format: /host/path:/pod/path. Repeatable")
+	cmd.Flags().IntVar(&opts.CopyAttempts, "copy-attempts", 3, "Retry count for file copy operations (default: 3)")
+	cmd.Flags().IntVar(&opts.UpdateRepoAttempts, "update-repo-attempts", 3, "Retry count for Helm repo update operations (default: 3)")
+	cmd.Flags().StringSliceVar(&opts.CopyFrom, "copy-from", []string{}, "Copy files/directories from pod to host after execution. Format: /pod/path:/host/path. Repeatable")
 }
 
 // parseCopyFromMappings parses --copy-from flag values into a map of pod_path -> host_path.

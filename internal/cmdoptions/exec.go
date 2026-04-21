@@ -32,9 +32,9 @@ type ExecOptions struct {
 	CreatePDB       bool
 	// Timeout is duration from --timeout flag + 10 minutes
 	// set internally
-	Timeout            time.Duration
-	CopyAttempts       int
-	UpdateRepoAttempts int
+	Timeout               time.Duration
+	CopyAttempts          int
+	UpdateRepoAttempts    int
 	Volumes               []string
 	ServiceAccount        string
 	DryRun                bool
