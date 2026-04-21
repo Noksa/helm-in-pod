@@ -4,18 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/logz"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
-
-// GenerateOperationID generates a unique UUID for a helm-in-pod operation
-func GenerateOperationID() string {
-	return uuid.New().String()
-}
 
 // CreatePodDisruptionBudget creates a PDB for the given pod with the operation ID
 func (m *Manager) CreatePodDisruptionBudget(ctx context.Context, operationID string) error {
