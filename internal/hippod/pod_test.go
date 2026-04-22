@@ -55,6 +55,52 @@ var _ = Describe("parseToleration", func() {
 	})
 })
 
+var _ = Describe("isPodReady", func() {
+	It("returns false for a nil pod", func() {
+		Expect(isPodReady(nil)).To(BeFalse())
+	})
+
+	It("returns false when the pod has no container statuses", func() {
+		pod := &corev1.Pod{}
+		Expect(isPodReady(pod)).To(BeFalse())
+	})
+
+	It("returns false when every container is not ready", func() {
+		pod := &corev1.Pod{
+			Status: corev1.PodStatus{
+				ContainerStatuses: []corev1.ContainerStatus{
+					{Name: "a", Ready: false},
+					{Name: "b", Ready: false},
+				},
+			},
+		}
+		Expect(isPodReady(pod)).To(BeFalse())
+	})
+
+	It("returns true when at least one container is ready", func() {
+		pod := &corev1.Pod{
+			Status: corev1.PodStatus{
+				ContainerStatuses: []corev1.ContainerStatus{
+					{Name: "a", Ready: false},
+					{Name: "b", Ready: true},
+				},
+			},
+		}
+		Expect(isPodReady(pod)).To(BeTrue())
+	})
+
+	It("returns true when the single container is ready", func() {
+		pod := &corev1.Pod{
+			Status: corev1.PodStatus{
+				ContainerStatuses: []corev1.ContainerStatus{
+					{Name: "helm-in-pod", Ready: true},
+				},
+			},
+		}
+		Expect(isPodReady(pod)).To(BeTrue())
+	})
+})
+
 var _ = Describe("NodeSelector", func() {
 	It("should handle single node selector", func() {
 		input := map[string]string{"disktype": "ssd"}
