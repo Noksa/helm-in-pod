@@ -255,4 +255,231 @@ var _ = Describe("Flag Registration", func() {
 			Expect(opts.CopyFrom).To(ContainElements("/tmp/a:./a", "/tmp/b:./b"))
 		})
 	})
+
+	Context("daemon start command flags", func() {
+		var startCmd *cobra.Command
+
+		BeforeEach(func() {
+			startCmd = newDaemonStartCmd()
+		})
+
+		It("should register daemon-specific flags", func() {
+			Expect(startCmd.Flags().Lookup("name")).NotTo(BeNil())
+			Expect(startCmd.Flags().Lookup("force")).NotTo(BeNil())
+		})
+
+		It("should inherit pod creation flags", func() {
+			flags := []string{
+				"run-as-user", "run-as-group",
+				"labels", "annotations", "create-pdb",
+				"cpu", "memory",
+				"cpu-request", "cpu-limit", "memory-request", "memory-limit",
+				"host-network", "tolerations", "node-selector",
+				"image-pull-secret", "pull-policy", "image",
+				"volume", "service-account", "dry-run",
+				"active-deadline-seconds",
+			}
+			for _, name := range flags {
+				Expect(startCmd.Flags().Lookup(name)).NotTo(BeNil(), "flag --%s should be registered", name)
+			}
+		})
+
+		It("should inherit runtime flags", func() {
+			flags := []string{
+				"env", "subst-env", "copy-repo", "update-repo",
+				"copy", "copy-attempts", "update-repo-attempts",
+				"copy-from",
+			}
+			for _, name := range flags {
+				Expect(startCmd.Flags().Lookup(name)).NotTo(BeNil(), "flag --%s should be registered", name)
+			}
+		})
+
+		It("should have empty default for --name", func() {
+			Expect(startCmd.Flags().Lookup("name").DefValue).To(Equal(""))
+		})
+
+		It("should have false default for --force", func() {
+			Expect(startCmd.Flags().Lookup("force").DefValue).To(Equal("false"))
+		})
+
+		It("should have shorthand -f for --force", func() {
+			Expect(startCmd.Flags().Lookup("force").Shorthand).To(Equal("f"))
+		})
+
+		It("should default --copy-repo to true (inherits exec defaults)", func() {
+			Expect(startCmd.Flags().Lookup("copy-repo").DefValue).To(Equal("true"))
+		})
+
+		It("should parse --name value", func() {
+			Expect(startCmd.Flags().Set("name", "my-daemon")).To(Succeed())
+			Expect(startCmd.Flags().Lookup("name").Value.String()).To(Equal("my-daemon"))
+		})
+
+		It("should parse --force value", func() {
+			Expect(startCmd.Flags().Set("force", "true")).To(Succeed())
+			Expect(startCmd.Flags().Lookup("force").Value.String()).To(Equal("true"))
+		})
+
+		It("should not register daemon-exec-only flags", func() {
+			Expect(startCmd.Flags().Lookup("update-all-repos")).To(BeNil())
+			Expect(startCmd.Flags().Lookup("clean")).To(BeNil())
+			Expect(startCmd.Flags().Lookup("shell")).To(BeNil())
+		})
+	})
+
+	Context("daemon exec command flags", func() {
+		var execCmd *cobra.Command
+
+		BeforeEach(func() {
+			execCmd = newDaemonExecCmd()
+		})
+
+		It("should register daemon-exec-specific flags", func() {
+			Expect(execCmd.Flags().Lookup("name")).NotTo(BeNil())
+			Expect(execCmd.Flags().Lookup("update-all-repos")).NotTo(BeNil())
+			Expect(execCmd.Flags().Lookup("clean")).NotTo(BeNil())
+		})
+
+		It("should inherit runtime flags", func() {
+			flags := []string{
+				"env", "subst-env", "copy-repo", "update-repo",
+				"copy", "copy-attempts", "update-repo-attempts",
+				"copy-from",
+			}
+			for _, name := range flags {
+				Expect(execCmd.Flags().Lookup(name)).NotTo(BeNil(), "flag --%s should be registered", name)
+			}
+		})
+
+		It("should default --copy-repo to false for daemon exec", func() {
+			Expect(execCmd.Flags().Lookup("copy-repo").DefValue).To(Equal("false"))
+		})
+
+		It("should have false default for --update-all-repos", func() {
+			Expect(execCmd.Flags().Lookup("update-all-repos").DefValue).To(Equal("false"))
+		})
+
+		It("should have empty default for --clean", func() {
+			Expect(execCmd.Flags().Lookup("clean").DefValue).To(Equal("[]"))
+		})
+
+		It("should parse --update-all-repos value", func() {
+			Expect(execCmd.Flags().Set("update-all-repos", "true")).To(Succeed())
+			Expect(execCmd.Flags().Lookup("update-all-repos").Value.String()).To(Equal("true"))
+		})
+
+		It("should parse --clean as string slice", func() {
+			Expect(execCmd.Flags().Set("clean", "/tmp/a")).To(Succeed())
+			Expect(execCmd.Flags().Set("clean", "/tmp/b")).To(Succeed())
+			Expect(execCmd.Flags().Lookup("clean").Value.String()).To(Equal("[/tmp/a,/tmp/b]"))
+		})
+
+		It("should not register pod creation flags", func() {
+			// daemon exec uses an existing daemon pod, so pod creation flags do not apply
+			Expect(execCmd.Flags().Lookup("image")).To(BeNil())
+			Expect(execCmd.Flags().Lookup("cpu-request")).To(BeNil())
+			Expect(execCmd.Flags().Lookup("volume")).To(BeNil())
+			Expect(execCmd.Flags().Lookup("service-account")).To(BeNil())
+			Expect(execCmd.Flags().Lookup("dry-run")).To(BeNil())
+		})
+	})
+
+	Context("daemon shell command flags", func() {
+		var shellCmd *cobra.Command
+
+		BeforeEach(func() {
+			shellCmd = newDaemonShellCmd()
+		})
+
+		It("should register --name and --shell", func() {
+			Expect(shellCmd.Flags().Lookup("name")).NotTo(BeNil())
+			Expect(shellCmd.Flags().Lookup("shell")).NotTo(BeNil())
+		})
+
+		It("should default --shell to sh", func() {
+			Expect(shellCmd.Flags().Lookup("shell").DefValue).To(Equal("sh"))
+		})
+
+		It("should parse --shell value", func() {
+			Expect(shellCmd.Flags().Set("shell", "bash")).To(Succeed())
+			Expect(shellCmd.Flags().Lookup("shell").Value.String()).To(Equal("bash"))
+		})
+	})
+
+	Context("daemon stop command flags", func() {
+		It("should register only --name", func() {
+			stopCmd := newDaemonStopCmd()
+			Expect(stopCmd.Flags().Lookup("name")).NotTo(BeNil())
+			Expect(stopCmd.Flags().Lookup("force")).To(BeNil())
+		})
+	})
+
+	Context("daemon status command flags", func() {
+		It("should register only --name", func() {
+			statusCmd := newDaemonStatusCmd()
+			Expect(statusCmd.Flags().Lookup("name")).NotTo(BeNil())
+		})
+	})
+
+	Context("daemon list command flags", func() {
+		It("should register no flags and expose ls alias", func() {
+			listCmd := newDaemonListCmd()
+			Expect(listCmd.Aliases).To(ContainElement("ls"))
+			// list takes no flags of its own
+			Expect(listCmd.Flags().Lookup("name")).To(BeNil())
+		})
+	})
+
+	Context("purge command flags", func() {
+		var purgeCmd *cobra.Command
+
+		BeforeEach(func() {
+			purgeCmd = newPurgeCmd()
+		})
+
+		It("should register --all", func() {
+			Expect(purgeCmd.Flags().Lookup("all")).NotTo(BeNil())
+		})
+
+		It("should default --all to false", func() {
+			Expect(purgeCmd.Flags().Lookup("all").DefValue).To(Equal("false"))
+		})
+
+		It("should parse --all value", func() {
+			Expect(purgeCmd.Flags().Set("all", "true")).To(Succeed())
+			Expect(purgeCmd.Flags().Lookup("all").Value.String()).To(Equal("true"))
+		})
+	})
+
+	Context("root command persistent flags", func() {
+		var rootCmd *cobra.Command
+
+		BeforeEach(func() {
+			rootCmd = newRootCmd()
+		})
+
+		It("should register --verbose-logs and --timeout as persistent flags", func() {
+			Expect(rootCmd.PersistentFlags().Lookup("verbose-logs")).NotTo(BeNil())
+			Expect(rootCmd.PersistentFlags().Lookup("timeout")).NotTo(BeNil())
+		})
+
+		It("should default --verbose-logs to false", func() {
+			Expect(rootCmd.PersistentFlags().Lookup("verbose-logs").DefValue).To(Equal("false"))
+		})
+
+		It("should default --timeout to 0s", func() {
+			Expect(rootCmd.PersistentFlags().Lookup("timeout").DefValue).To(Equal("0s"))
+		})
+
+		It("should parse --verbose-logs value", func() {
+			Expect(rootCmd.PersistentFlags().Set("verbose-logs", "true")).To(Succeed())
+			Expect(rootCmd.PersistentFlags().Lookup("verbose-logs").Value.String()).To(Equal("true"))
+		})
+
+		It("should parse --timeout as a duration", func() {
+			Expect(rootCmd.PersistentFlags().Set("timeout", "30m")).To(Succeed())
+			Expect(rootCmd.PersistentFlags().Lookup("timeout").Value.String()).To(Equal("30m0s"))
+		})
+	})
 })
