@@ -184,6 +184,23 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	return pod, m.waitUntilPodIsRunning(pod)
 }
 
+// isPodReady reports whether at least one of the pod's containers is marked
+// Ready by the kubelet. The kubelet flips ContainerStatus.Ready based on the
+// StartupProbe/ReadinessProbe declared in the pod spec, so reading this field
+// is equivalent to running the probe ourselves — but via a single cheap GET
+// against the API server instead of a streaming exec session.
+func isPodReady(pod *corev1.Pod) bool {
+	if pod == nil {
+		return false
+	}
+	for i := range pod.Status.ContainerStatuses {
+		if pod.Status.ContainerStatuses[i].Ready {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Manager) waitUntilPodIsRunning(pod *corev1.Pod) error {
 	logz.Host().Info().Msgf("Waiting until %v pod is ready", color.MagentaString(pod.Name))
 
@@ -192,12 +209,18 @@ func (m *Manager) waitUntilPodIsRunning(pod *corev1.Pod) error {
 			return false, fmt.Errorf("interrupted while was waiting for pod readiness")
 		}
 
-		stdout, stderr, err := m.client().ExecInPod("[ -f /tmp/ready ] && echo ready", Namespace, pod.Name, pod.Namespace)
-		if err != nil {
-			logz.Pod().Debug().Msgf("Not ready yet: %v %v", stderr, err.Error())
+		// Read pod readiness from the Kubernetes API (a cheap HTTP GET) instead of
+		// opening a streaming exec session every second. The pod spec already defines
+		// a StartupProbe that checks `/tmp/ready`, so the kubelet is the authoritative
+		// source of readiness and mirrors it into ContainerStatus.Ready.
+		// This dramatically reduces API server load when many helm-in-pod processes
+		// run in parallel (exec opens an SPDY/WebSocket stream per call).
+		latestPod, getErr := m.client().ClientSet().CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
+		if getErr != nil {
+			logz.Pod().Debug().Msgf("Not ready yet: %v", getErr)
 			return false, nil
 		}
-		if strings.Contains(stdout, "ready") {
+		if isPodReady(latestPod) {
 			logz.Host().Debug().Msgf("%v pod is ready", color.CyanString(pod.Name))
 			return true, nil
 		}
