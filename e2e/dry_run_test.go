@@ -7,9 +7,10 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
 
 var _ = Describe("Dry Run", func() {
@@ -45,7 +46,7 @@ var _ = Describe("Dry Run", func() {
 
 			// Verify no pod was actually created (use -o name to avoid stderr "No resources found" message)
 			cmd = exec.Command("kubectl", "get", "pods", "-n", hipconsts.HelmInPodNamespace,
-				"-l", strings.Replace(testLabel, "=", "=", 1), "-o", "name")
+				"-l", testLabel, "-o", "name")
 			podOutput, _ := Run(cmd)
 			Expect(strings.TrimSpace(podOutput)).To(BeEmpty(), "No pod should be created in dry-run mode")
 		})

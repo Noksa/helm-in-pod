@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/noksa/helm-in-pod/internal/cmdoptions"
-	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
 
 // buildLabelSelector mimics the logic in DeleteHelmPods for building label selectors

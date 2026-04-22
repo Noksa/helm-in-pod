@@ -7,12 +7,13 @@ import (
 	"strings"
 
 	"github.com/noksa/go-helpers/helpers/gopointer"
-	"github.com/noksa/helm-in-pod/internal/cmdoptions"
-	"github.com/noksa/helm-in-pod/internal/hipconsts"
-	"github.com/noksa/helm-in-pod/internal/hipembedded"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
+	"github.com/noksa/helm-in-pod/internal/hipembedded"
 )
 
 // parseVolume parses a volume string in format: type:name:mountPath[:readOnly]

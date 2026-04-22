@@ -105,7 +105,7 @@ var _ = Describe("extractTarGz", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(info.IsDir()).To(BeTrue())
 
-		data, err := os.ReadFile(filepath.Join(destDir, "subdir/file.txt"))
+		data, err := os.ReadFile(filepath.Join(destDir, "subdir", "file.txt"))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(data)).To(Equal("nested"))
 	})
@@ -116,7 +116,7 @@ var _ = Describe("extractTarGz", func() {
 		})
 		Expect(extractTarGz(archive, destDir)).To(Succeed())
 
-		data, err := os.ReadFile(filepath.Join(destDir, "deep/nested/file.txt"))
+		data, err := os.ReadFile(filepath.Join(destDir, "deep", "nested", "file.txt"))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(data)).To(Equal("deep content"))
 	})

@@ -8,8 +8,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	. "github.com/onsi/ginkgo/v2"
+
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
 
 // randomString generates a random string of given length

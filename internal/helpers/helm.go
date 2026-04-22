@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
+
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
 

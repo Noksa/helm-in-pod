@@ -21,17 +21,18 @@ import (
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/fatih/color"
 	"github.com/google/uuid"
-	"github.com/noksa/helm-in-pod/internal/cmdoptions"
-	"github.com/noksa/helm-in-pod/internal/helmtar"
-	"github.com/noksa/helm-in-pod/internal/hipconsts"
-	"github.com/noksa/helm-in-pod/internal/hipretry"
-	"github.com/noksa/helm-in-pod/internal/logz"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
+
+	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/helmtar"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
+	"github.com/noksa/helm-in-pod/internal/hipretry"
+	"github.com/noksa/helm-in-pod/internal/logz"
 )
 
 const Namespace = "helm-in-pod"
@@ -70,7 +71,8 @@ func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOption
 	if err != nil {
 		return err
 	}
-	for _, pod := range pods.Items {
+	for i := range pods.Items {
+		pod := &pods.Items[i]
 		logz.Host().Debug().Msgf("Deleting '%v' pod", pod.Name)
 
 		// Extract operation ID from pod labels and delete associated PDB
@@ -625,7 +627,8 @@ func (m *Manager) ListDaemonPods() ([]DaemonInfo, error) {
 	}
 
 	var infos []DaemonInfo
-	for _, pod := range pods.Items {
+	for i := range pods.Items {
+		pod := &pods.Items[i]
 		daemonName := pod.Labels["daemon"]
 		if daemonName == "" {
 			continue

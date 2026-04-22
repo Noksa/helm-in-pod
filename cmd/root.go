@@ -5,12 +5,13 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/noksa/helm-in-pod/internal"
-	"github.com/noksa/helm-in-pod/internal/helpers"
-	"github.com/noksa/helm-in-pod/internal/logz"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/noksa/helm-in-pod/internal"
+	"github.com/noksa/helm-in-pod/internal/helpers"
+	"github.com/noksa/helm-in-pod/internal/logz"
 )
 
 func newRootCmd() *cobra.Command {
@@ -37,7 +38,7 @@ func newRootCmd() *cobra.Command {
 			logz.Host().Info().Msgf("Running %v command", color.CyanString(cmd.Name()))
 		}
 		if err := internal.InitManagers(); err != nil {
-			return fmt.Errorf("could not initialise Kubernetes client: %w", err)
+			return fmt.Errorf("could not initialize Kubernetes client: %w", err)
 		}
 		return nil
 	}

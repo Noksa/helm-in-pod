@@ -3,9 +3,10 @@ package cmd
 import (
 	"errors"
 
+	"github.com/spf13/cobra"
+
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
-	"github.com/spf13/cobra"
 )
 
 func newPurgeCmd() *cobra.Command {

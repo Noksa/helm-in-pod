@@ -8,9 +8,10 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
 
 var _ = Describe("Exit Code Propagation", func() {

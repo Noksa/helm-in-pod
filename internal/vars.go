@@ -6,9 +6,10 @@ import (
 	"os"
 
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
+	"k8s.io/client-go/tools/clientcmd"
+
 	"github.com/noksa/helm-in-pod/internal/hipns"
 	"github.com/noksa/helm-in-pod/internal/hippod"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (

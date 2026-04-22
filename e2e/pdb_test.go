@@ -8,9 +8,10 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
 
 var _ = Describe("PodDisruptionBudget", func() {
@@ -69,7 +70,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 
 			items := pdbList["items"].([]interface{})
 			// After command completion, PDB for our pod should be cleaned up
-			Expect(items).To(HaveLen(0), "PDB should be cleaned up after pod deletion")
+			Expect(items).To(BeEmpty(), "PDB should be cleaned up after pod deletion")
 		})
 
 		It("should create PDB with minAvailable=1", func() {
@@ -147,7 +148,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			items := pdbList["items"].([]interface{})
-			Expect(items).To(HaveLen(0), "PDB should be deleted when daemon pod is stopped")
+			Expect(items).To(BeEmpty(), "PDB should be deleted when daemon pod is stopped")
 		})
 
 		It("should have unique operation-id for each pod", func() {
@@ -298,7 +299,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 			var oldPDBList map[string]interface{}
 			err = json.Unmarshal([]byte(output), &oldPDBList)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(oldPDBList["items"].([]interface{})).To(HaveLen(0),
+			Expect(oldPDBList["items"].([]interface{})).To(BeEmpty(),
 				"Old PDB should be deleted")
 
 			// Verify new PDB exists
@@ -378,7 +379,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 			var pdbList map[string]interface{}
 			err = json.Unmarshal([]byte(output), &pdbList)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(pdbList["items"].([]interface{})).To(HaveLen(0),
+			Expect(pdbList["items"].([]interface{})).To(BeEmpty(),
 				"All PDBs should be deleted when pods are purged")
 		})
 	})
@@ -413,7 +414,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			items := pdbList["items"].([]interface{})
-			Expect(items).To(HaveLen(0), "No PDB should be created when --create-pdb=false")
+			Expect(items).To(BeEmpty(), "No PDB should be created when --create-pdb=false")
 		})
 
 		It("should create PDB for daemon by default (when flag not specified)", func() {

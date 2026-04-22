@@ -6,10 +6,11 @@ import (
 	"os"
 
 	"github.com/fatih/color"
-	"github.com/noksa/helm-in-pod/cmd"
-	"github.com/noksa/helm-in-pod/internal/hiperrors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	"github.com/noksa/helm-in-pod/cmd"
+	"github.com/noksa/helm-in-pod/internal/hiperrors"
 )
 
 func main() {

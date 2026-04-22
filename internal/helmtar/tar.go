@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+
 	"github.com/noksa/helm-in-pod/internal/logz"
 )
 

@@ -2,10 +2,11 @@ package cmd
 
 import (
 	"github.com/fatih/color"
-	"github.com/noksa/helm-in-pod/internal"
-	"github.com/noksa/helm-in-pod/internal/logz"
 	"github.com/spf13/cobra"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+
+	"github.com/noksa/helm-in-pod/internal"
+	"github.com/noksa/helm-in-pod/internal/logz"
 )
 
 func newDaemonStopCmd() *cobra.Command {

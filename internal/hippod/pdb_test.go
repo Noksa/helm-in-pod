@@ -1,10 +1,11 @@
 package hippod_test
 
 import (
-	"github.com/noksa/helm-in-pod/internal/cmdoptions"
-	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
 
 var _ = Describe("PDB", func() {

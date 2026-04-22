@@ -3,11 +3,12 @@ package hippod
 import (
 	"time"
 
-	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 )
 
 var _ = Describe("buildPodSpec", func() {
@@ -525,6 +526,51 @@ var _ = Describe("buildPodSpec", func() {
 		})
 	})
 
+	Context("topology spread constraints", func() {
+		It("should always set a topology spread constraint", func() {
+			opts := baseOpts()
+			spec, err := buildPodSpec(opts, false)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(spec.TopologySpreadConstraints).To(HaveLen(1))
+			tsc := spec.TopologySpreadConstraints[0]
+			Expect(tsc.MaxSkew).To(Equal(int32(1)))
+			Expect(tsc.TopologyKey).To(Equal("kubernetes.io/hostname"))
+			Expect(tsc.WhenUnsatisfiable).To(Equal(corev1.ScheduleAnyway))
+			Expect(tsc.LabelSelector).NotTo(BeNil())
+			Expect(tsc.LabelSelector.MatchLabels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", Namespace))
+		})
+	})
+
+	Context("copy-from env injection", func() {
+		It("should set WAIT_COPY_DONE when CopyFrom is non-empty and not daemon", func() {
+			opts := baseOpts()
+			opts.CopyFrom = []string{"/tmp/out:/local/out"}
+			spec, err := buildPodSpec(opts, false)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(envVarNames(spec.Containers[0].Env)).To(ContainElement("WAIT_COPY_DONE"))
+			Expect(findEnvVar(spec.Containers[0].Env, "WAIT_COPY_DONE")).To(Equal("1"))
+		})
+
+		It("should not set WAIT_COPY_DONE when CopyFrom is empty", func() {
+			opts := baseOpts()
+			spec, err := buildPodSpec(opts, false)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(envVarNames(spec.Containers[0].Env)).NotTo(ContainElement("WAIT_COPY_DONE"))
+		})
+
+		It("should not set WAIT_COPY_DONE in daemon mode even with CopyFrom", func() {
+			opts := baseOpts()
+			opts.CopyFrom = []string{"/tmp/out:/local/out"}
+			spec, err := buildPodSpec(opts, true)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(envVarNames(spec.Containers[0].Env)).NotTo(ContainElement("WAIT_COPY_DONE"))
+		})
+	})
+
 	Context("pod defaults", func() {
 		It("should set restart policy to Never", func() {
 			opts := baseOpts()
@@ -662,6 +708,15 @@ var _ = Describe("buildDaemonPodSpec", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(spec.ServiceAccountName).To(Equal("custom-sa"))
+	})
+
+	It("should preserve topology spread constraints from buildPodSpec", func() {
+		opts := baseOpts()
+		spec, err := buildDaemonPodSpec(opts)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(spec.TopologySpreadConstraints).To(HaveLen(1))
+		Expect(spec.TopologySpreadConstraints[0].TopologyKey).To(Equal("kubernetes.io/hostname"))
 	})
 })
 

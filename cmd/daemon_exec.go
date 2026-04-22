@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/logz"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 func newDaemonExecCmd() *cobra.Command {
@@ -51,19 +52,20 @@ func newDaemonExecCmd() *cobra.Command {
 					return fmt.Errorf("update-repo-attempts value can't be less 1")
 				}
 
-				if opts.CopyRepo {
+				switch {
+				case opts.CopyRepo:
 					err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, homeDirectory, isHelm4)
 					if err != nil {
 						return err
 					}
-				} else if opts.UpdateAllRepos {
+				case opts.UpdateAllRepos:
 					// Update all repos without copying
 					opts.UpdateRepo = []string{}
 					err = internal.Pod().UpdateHelmRepositories(pod, opts.ExecOptions, isHelm4)
 					if err != nil {
 						return err
 					}
-				} else if len(opts.UpdateRepo) > 0 {
+				case len(opts.UpdateRepo) > 0:
 					err = internal.Pod().UpdateHelmRepositories(pod, opts.ExecOptions, isHelm4)
 					if err != nil {
 						return err

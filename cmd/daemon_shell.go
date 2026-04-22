@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/logz"
-	"github.com/spf13/cobra"
 )
 
 func newDaemonShellCmd() *cobra.Command {

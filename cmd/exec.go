@@ -7,12 +7,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/helpers"
 	"github.com/noksa/helm-in-pod/internal/logz"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 func newExecCmd() *cobra.Command {

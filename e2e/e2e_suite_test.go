@@ -10,9 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
 
 func TestE2E(t *testing.T) {

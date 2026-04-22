@@ -14,16 +14,17 @@ import (
 
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"github.com/fatih/color"
-	"github.com/noksa/helm-in-pod/internal/cmdoptions"
-	"github.com/noksa/helm-in-pod/internal/hipconsts"
-	"github.com/noksa/helm-in-pod/internal/hiperrors"
-	"github.com/noksa/helm-in-pod/internal/hipretry"
-	"github.com/noksa/helm-in-pod/internal/logz"
 	"helm.sh/helm/v4/pkg/cli"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
+	"github.com/noksa/helm-in-pod/internal/hiperrors"
+	"github.com/noksa/helm-in-pod/internal/hipretry"
+	"github.com/noksa/helm-in-pod/internal/logz"
 )
 
 type UserInfo struct {
@@ -429,9 +430,9 @@ func (m *Manager) getContainerExitCode(pod *corev1.Pod) int32 {
 // exitCodeFromContainerStatuses extracts the exit code from container statuses.
 // Returns ExitCodeUnknown if no terminated container is found.
 func exitCodeFromContainerStatuses(statuses []corev1.ContainerStatus) int32 {
-	for _, cs := range statuses {
-		if cs.State.Terminated != nil {
-			return cs.State.Terminated.ExitCode
+	for i := range statuses {
+		if statuses[i].State.Terminated != nil {
+			return statuses[i].State.Terminated.ExitCode
 		}
 	}
 	return hiperrors.ExitCodeUnknown
@@ -490,7 +491,7 @@ func (w *exitCodeMarkerWriter) Write(p []byte) (int, error) {
 	suffix := hipconsts.CopyFromExitCodeMarkerSuffix
 	if strings.Contains(s, prefix) {
 		// Extract exit code between prefix and suffix
-		after, _ := strings.CutPrefix(s[strings.Index(s, prefix):], prefix)
+		_, after, _ := strings.Cut(s, prefix)
 		if codeStr, ok := strings.CutSuffix(after, suffix+"\n"); !ok {
 			codeStr, _ = strings.CutSuffix(after, suffix)
 			after = codeStr

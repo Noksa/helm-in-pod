@@ -5,8 +5,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/noksa/helm-in-pod/internal/logz"
 	"github.com/spf13/cobra"
+
+	"github.com/noksa/helm-in-pod/internal/logz"
 )
 
 func RunCommand(cmd *cobra.Command) error {

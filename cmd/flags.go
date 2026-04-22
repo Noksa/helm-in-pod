@@ -5,9 +5,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
-	"github.com/spf13/cobra"
 )
 
 func getDaemonName(name string) (string, error) {

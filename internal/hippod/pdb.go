@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/noksa/helm-in-pod/internal/hipconsts"
-	"github.com/noksa/helm-in-pod/internal/logz"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
+	"github.com/noksa/helm-in-pod/internal/logz"
 )
 
 // CreatePodDisruptionBudget creates a PDB for the given pod with the operation ID

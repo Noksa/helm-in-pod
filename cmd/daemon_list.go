@@ -5,8 +5,9 @@ import (
 	"os"
 
 	"github.com/fatih/color"
-	"github.com/noksa/helm-in-pod/internal"
 	"github.com/spf13/cobra"
+
+	"github.com/noksa/helm-in-pod/internal"
 )
 
 func newDaemonListCmd() *cobra.Command {

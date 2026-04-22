@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
-	"github.com/noksa/helm-in-pod/internal/logz"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/noksa/helm-in-pod/internal/logz"
 )
 
 const Name = "helm-in-pod"
