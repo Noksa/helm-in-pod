@@ -193,8 +193,8 @@ func isPodReady(pod *corev1.Pod) bool {
 	if pod == nil {
 		return false
 	}
-	for _, cs := range pod.Status.ContainerStatuses {
-		if cs.Ready {
+	for i := range pod.Status.ContainerStatuses {
+		if pod.Status.ContainerStatuses[i].Ready {
 			return true
 		}
 	}
