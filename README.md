@@ -1,5 +1,9 @@
 # 🚀 helm-in-pod
 
+<p align="center">
+  <img src="assets/banner.png" alt="helm-in-pod banner" width="100%">
+</p>
+
 > ⚡ A Helm plugin to run any command (helm/kubectl/etc) inside a Kubernetes cluster
 
 ---
