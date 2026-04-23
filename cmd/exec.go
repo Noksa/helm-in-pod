@@ -12,7 +12,7 @@ import (
 
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
-	"github.com/noksa/helm-in-pod/internal/helpers"
+	"github.com/noksa/helm-in-pod/internal/helmtar"
 	"github.com/noksa/helm-in-pod/internal/logz"
 )
 
@@ -69,44 +69,34 @@ The pod is deleted after the command completes, even on failure.`,
 			return err
 		}
 
-		// Get pod user info
-		userInfo, err := internal.Pod().GetPodUserInfo(pod)
+		cmdToUse := strings.Join(args, " ")
+
+		bundle := make([]helmtar.BundleEntry, 0, len(opts.FilesAsMap))
+		for src, dest := range opts.FilesAsMap {
+			expandedSrc, expandErr := expand(src)
+			if expandErr != nil {
+				return expandErr
+			}
+			bundle = append(bundle, helmtar.BundleEntry{SrcPath: expandedSrc, DestPath: dest})
+		}
+
+		bootInfo, err := internal.Pod().CopyFilesBundleWithBootInfo(pod, bundle, nil, opts.CopyAttempts)
 		if err != nil {
 			return err
 		}
 
-		// Check if helm is installed
-		helmFound := false
-		isHelm4, err := helpers.IsHelm4(pod.Name, pod.Namespace, opts.Image)
-		if err != nil {
-			if !strings.Contains(err.Error(), "helm is not installed") {
-				return err
-			}
-		} else {
-			helmFound = true
-		}
-
-		if !helmFound {
+		if !bootInfo.HelmFound {
 			logz.Pod().Warn().Msg("helm is not installed in the image, all helm prerequisites will be skipped. If the passed command contains helm calls, it will fail")
 		}
 
-		// Sync helm repositories if needed
-		if opts.CopyRepo && helmFound {
-			err = internal.Pod().SyncHelmRepositories(pod, opts, userInfo.HomeDirectory, isHelm4)
+		if opts.CopyRepo && bootInfo.HelmFound {
+			err = internal.Pod().SyncHelmRepositories(pod, opts, bootInfo.HomeDirectory, bootInfo.IsHelm4)
 			if err != nil {
 				return err
 			}
 		}
 
-		// Copy user files
-		err = internal.Pod().CopyUserFiles(pod, opts, expand, nil)
-		if err != nil {
-			return err
-		}
-
-		// Execute command
-		cmdToUse := strings.Join(args, " ")
-		execErr := internal.Pod().ExecuteCommand(cmd.Context(), pod, cmdToUse, userInfo.HomeDirectory, opts)
+		execErr := internal.Pod().ExecuteCommand(cmd.Context(), pod, cmdToUse, bootInfo.HomeDirectory, opts)
 
 		// Copy files from pod to host (even if command failed, user may want artifacts)
 		if len(opts.CopyFrom) > 0 {

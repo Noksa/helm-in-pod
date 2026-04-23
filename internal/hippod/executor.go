@@ -190,10 +190,11 @@ func (m *Manager) CopyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions, ex
 	return nil
 }
 
+// ExecuteCommand copies the wrapped script to the pod and streams execution until
+// the pod completes. Always call after all preprocessing (file copies, repo sync)
+// so the pod init script does not start the user command prematurely.
 func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command string, homeDirectory string, opts cmdoptions.ExecOptions) error {
 	copyFromMode := len(opts.CopyFrom) > 0
-
-	scriptPath := fmt.Sprintf("%v/wrapped-script.sh", homeDirectory)
 
 	tempScriptFile, err := os.CreateTemp("", hipconsts.HelmInPodNamespace)
 	if err != nil {
@@ -204,27 +205,17 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 		_ = os.RemoveAll(tempScriptFile.Name())
 	}()
 
-	err = os.Chmod(tempScriptFile.Name(), os.ModePerm)
-	if err != nil {
+	if err := os.Chmod(tempScriptFile.Name(), os.ModePerm); err != nil {
 		return err
 	}
-
-	_, err = tempScriptFile.WriteString("#!/bin/sh\nset -eu\n")
-	if err != nil {
-		return err
-	}
-	_, err = tempScriptFile.WriteString(command)
-	if err != nil {
-		return err
-	}
-	_, err = tempScriptFile.WriteString("\n")
-	if err != nil {
-		return err
+	for _, s := range []string{"#!/bin/sh\nset -eu\n", command, "\n"} {
+		if _, wErr := tempScriptFile.WriteString(s); wErr != nil {
+			return wErr
+		}
 	}
 
 	since := time.Now()
-	err = m.CopyFileToPod(pod, tempScriptFile.Name(), scriptPath, opts.CopyAttempts)
-	if err != nil {
+	if err := m.CopyFileToPod(pod, tempScriptFile.Name(), hipconsts.WrappedScriptPath, opts.CopyAttempts); err != nil {
 		return err
 	}
 

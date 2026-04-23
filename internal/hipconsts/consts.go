@@ -21,4 +21,7 @@ const (
 
 	// Environment variable to enable copy-from wait mode in the pod script
 	EnvWaitCopyDone = "WAIT_COPY_DONE"
+
+	// WrappedScriptPath is the fixed path inside the pod for the user command script.
+	WrappedScriptPath = "/tmp/hip-wrapped-script.sh"
 )

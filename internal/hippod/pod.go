@@ -256,6 +256,87 @@ func (m *Manager) waitUntilPodIsDeleted(podName string) error {
 	return err
 }
 
+// BootInfo holds pod metadata collected during the bundle copy step.
+type BootInfo struct {
+	HomeDirectory string
+	Whoami        string
+	ID            string
+	HelmVersion   string // raw string like "v3.14.0", "v4.0.0", or "none" when helm is absent
+	IsHelm4       bool
+	HelmFound     bool
+}
+
+// CopyFilesBundleWithBootInfo copies all provided entries to the pod in a single
+// ExecInPod call and simultaneously collects boot metadata (home dir, user, helm version).
+// The pod-side command emits "HOME:::whoami:::id:::helmversion\n" on stdout, then
+// extracts the multi-entry tar from stdin at their destination paths.
+func (m *Manager) CopyFilesBundleWithBootInfo(pod *corev1.Pod, entries []helmtar.BundleEntry, cleanPaths []string, attempts int) (*BootInfo, error) {
+	buf := &bytes.Buffer{}
+	if err := helmtar.CompressMulti(entries, buf); err != nil {
+		return nil, fmt.Errorf("building bundle tar: %w", err)
+	}
+	tarBytes := buf.Bytes()
+
+	cleanCmd := ""
+	if len(cleanPaths) > 0 {
+		cleanCmd = fmt.Sprintf("rm -rf %s; ", strings.Join(cleanPaths, " "))
+	}
+	cmd := fmt.Sprintf(
+		`printf '%%s:::%%s:::%%s:::%%s\n' "${HOME}" "$(whoami)" "$(id)" "$(helm version --template '{{ $.Version }}' 2>/dev/null || echo none)"; %star zxf - -C /`,
+		cleanCmd,
+	)
+
+	var info *BootInfo
+	err := hipretry.Retry(attempts, func() error {
+		logz.HostPod().Info().Msg("Copying files bundle and collecting pod boot info")
+
+		var stdout bytes.Buffer
+		_, stderr, execErr := m.client().ExecInPod(cmd, Namespace, pod.Name, pod.Namespace,
+			operatorkclient.WithContext(m.ctx),
+			operatorkclient.WithTimeout(time.Minute*10),
+			operatorkclient.WithStdin(bytes.NewReader(tarBytes)),
+			operatorkclient.WithStdout(&stdout),
+		)
+		if execErr != nil {
+			return fmt.Errorf("%w: %s", execErr, stderr)
+		}
+
+		line := strings.TrimSpace(strings.SplitN(stdout.String(), "\n", 2)[0])
+		parts := strings.Split(line, ":::")
+		if len(parts) < 4 {
+			return fmt.Errorf("unexpected boot info line: %q", line)
+		}
+		homeDir := strings.TrimSuffix(parts[0], "/")
+		if homeDir == "" {
+			return fmt.Errorf("pod user has no home directory (whoami: %s, id: %s)", parts[1], parts[2])
+		}
+		helmVer := parts[3]
+		helmFound := helmVer != "none" && helmVer != ""
+		isHelm4 := false
+		if helmFound {
+			if len(helmVer) >= 2 && helmVer[0] == 'v' && helmVer[1] == '4' {
+				isHelm4 = true
+			}
+		}
+
+		info = &BootInfo{
+			HomeDirectory: homeDir,
+			Whoami:        parts[1],
+			ID:            parts[2],
+			HelmVersion:   helmVer,
+			IsHelm4:       isHelm4,
+			HelmFound:     helmFound,
+		}
+		logz.HostPod().Debug().Msgf("Bundle extracted — user: %v, home: %v, helm: %v",
+			color.GreenString(info.Whoami), color.MagentaString(info.HomeDirectory), color.CyanString(info.HelmVersion))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
 func (m *Manager) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string, attempts int) error {
 	buffer := &bytes.Buffer{}
 	srcPath = filepath.Clean(srcPath)

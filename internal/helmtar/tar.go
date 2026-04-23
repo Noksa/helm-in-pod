@@ -14,6 +14,75 @@ import (
 	"github.com/noksa/helm-in-pod/internal/logz"
 )
 
+// BundleEntry represents a single (src → dest) mapping to include in a multi-entry tar bundle.
+type BundleEntry struct {
+	SrcPath  string // local path (file or directory)
+	DestPath string // absolute path inside the pod
+}
+
+// CompressMulti packs multiple (src, dest) pairs into a single gzip-compressed tar stream.
+// The stream can be piped to "tar zxf - -C /" inside the pod to extract all files at once.
+func CompressMulti(entries []BundleEntry, buf io.Writer) error {
+	zr := gzip.NewWriter(buf)
+	tw := tar.NewWriter(zr)
+
+	for _, e := range entries {
+		if err := compressEntry(tw, e.SrcPath, e.DestPath); err != nil {
+			return err
+		}
+	}
+
+	if err := tw.Close(); err != nil {
+		return err
+	}
+	return zr.Close()
+}
+
+// compressEntry adds a single (src, dest) pair into an open tar writer.
+func compressEntry(tw *tar.Writer, src string, destPath string) error {
+	stat, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	isDir := stat.IsDir()
+
+	return filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		header, err := tar.FileInfoHeader(fi, file)
+		if err != nil {
+			return err
+		}
+		dir := file
+		trim := strings.TrimSuffix(src, "/")
+		filename := ""
+		if !fi.IsDir() {
+			filename = fi.Name()
+		}
+		dir = strings.ReplaceAll(dir, trim, destPath)
+		if !fi.IsDir() && !strings.Contains(dir, filename) && isDir {
+			dir = fmt.Sprintf("%v/%v", dir, fi.Name())
+		}
+		header.Name = filepath.ToSlash(dir)
+		logz.HostPod().Debug().Msgf("%v will be copied to %v", color.CyanString(file), color.MagentaString(dir))
+		if err := tw.WriteHeader(header); err != nil {
+			return err
+		}
+		if !fi.IsDir() {
+			data, err := os.Open(file)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = data.Close() }()
+			if _, err := io.Copy(tw, data); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func Compress(src string, destPath string, buf io.Writer) error {
 	// tar > gzip > buf
 	zr := gzip.NewWriter(buf)
