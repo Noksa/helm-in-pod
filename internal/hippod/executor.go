@@ -193,7 +193,7 @@ func (m *Manager) CopyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions, ex
 // ExecuteCommand copies the wrapped script to the pod and streams execution until
 // the pod completes. Always call after all preprocessing (file copies, repo sync)
 // so the pod init script does not start the user command prematurely.
-func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command string, homeDirectory string, opts cmdoptions.ExecOptions) error {
+func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command string, opts cmdoptions.ExecOptions) error {
 	copyFromMode := len(opts.CopyFrom) > 0
 
 	tempScriptFile, err := os.CreateTemp("", hipconsts.HelmInPodNamespace)

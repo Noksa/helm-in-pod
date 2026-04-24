@@ -96,7 +96,7 @@ The pod is deleted after the command completes, even on failure.`,
 			}
 		}
 
-		execErr := internal.Pod().ExecuteCommand(cmd.Context(), pod, cmdToUse, bootInfo.HomeDirectory, opts)
+		execErr := internal.Pod().ExecuteCommand(cmd.Context(), pod, cmdToUse, opts)
 
 		// Copy files from pod to host (even if command failed, user may want artifacts)
 		if len(opts.CopyFrom) > 0 {

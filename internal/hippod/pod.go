@@ -13,6 +13,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -256,6 +258,8 @@ func (m *Manager) waitUntilPodIsDeleted(podName string) error {
 	return err
 }
 
+var helmMajorVersionRe = regexp.MustCompile(`v(\d+)\.`)
+
 // BootInfo holds pod metadata collected during the bundle copy step.
 type BootInfo struct {
 	HomeDirectory string
@@ -314,8 +318,10 @@ func (m *Manager) CopyFilesBundleWithBootInfo(pod *corev1.Pod, entries []helmtar
 		helmFound := helmVer != "none" && helmVer != ""
 		isHelm4 := false
 		if helmFound {
-			if len(helmVer) >= 2 && helmVer[0] == 'v' && helmVer[1] == '4' {
-				isHelm4 = true
+			if m := helmMajorVersionRe.FindStringSubmatch(helmVer); len(m) >= 2 {
+				if major, convErr := strconv.Atoi(m[1]); convErr == nil {
+					isHelm4 = major == 4
+				}
 			}
 		}
 
