@@ -27,7 +27,7 @@ func CompressMulti(entries []BundleEntry, buf io.Writer) error {
 	tw := tar.NewWriter(zr)
 
 	for _, e := range entries {
-		if err := compressEntry(tw, e.SrcPath, e.DestPath); err != nil {
+		if err := addToTar(tw, e.SrcPath, e.DestPath); err != nil {
 			return err
 		}
 	}
@@ -38,8 +38,10 @@ func CompressMulti(entries []BundleEntry, buf io.Writer) error {
 	return zr.Close()
 }
 
-// compressEntry adds a single (src, dest) pair into an open tar writer.
-func compressEntry(tw *tar.Writer, src string, destPath string) error {
+
+// addToTar walks the source path and adds all files/directories to the tar writer
+// with the correct destination path inside the pod.
+func addToTar(tw *tar.Writer, src string, destPath string) error {
 	stat, err := os.Stat(src)
 	if err != nil {
 		return err
@@ -50,98 +52,45 @@ func compressEntry(tw *tar.Writer, src string, destPath string) error {
 		if err != nil {
 			return err
 		}
+
 		header, err := tar.FileInfoHeader(fi, file)
 		if err != nil {
 			return err
 		}
+
+		// Compute destination path inside the tar
 		dir := file
 		trim := strings.TrimSuffix(src, "/")
 		filename := ""
 		if !fi.IsDir() {
 			filename = fi.Name()
 		}
+
 		dir = strings.ReplaceAll(dir, trim, destPath)
 		if !fi.IsDir() && !strings.Contains(dir, filename) && isDir {
 			dir = fmt.Sprintf("%v/%v", dir, fi.Name())
 		}
+
 		header.Name = filepath.ToSlash(dir)
-		logz.HostPod().Debug().Msgf("%v will be copied to %v", color.CyanString(file), color.MagentaString(dir))
+
+		logz.HostPod().Debug().Msgf("%v will be copied to %v",
+			color.CyanString(file), color.MagentaString(dir))
+
 		if err := tw.WriteHeader(header); err != nil {
 			return err
 		}
+
 		if !fi.IsDir() {
 			data, err := os.Open(file)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = data.Close() }()
+
 			if _, err := io.Copy(tw, data); err != nil {
 				return err
 			}
 		}
 		return nil
 	})
-}
-
-func Compress(src string, destPath string, buf io.Writer) error {
-	// tar > gzip > buf
-	zr := gzip.NewWriter(buf)
-	tw := tar.NewWriter(zr)
-	stat, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-	isDir := stat.IsDir()
-	// walk through every file in the path
-	err = filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
-		// generate tar header
-		if err != nil {
-			return err
-		}
-		header, err := tar.FileInfoHeader(fi, file)
-		if err != nil {
-			return err
-		}
-		dir := file
-		trim := strings.TrimSuffix(src, "/")
-		filename := ""
-		if !fi.IsDir() {
-			filename = fi.Name()
-		}
-		dir = strings.ReplaceAll(dir, trim, destPath)
-		if !fi.IsDir() && !strings.Contains(dir, filename) && isDir {
-			dir = fmt.Sprintf("%v/%v", dir, fi.Name())
-		}
-		header.Name = filepath.ToSlash(dir)
-		logz.HostPod().Debug().Msgf("%v will be copied to %v", color.CyanString(file), color.MagentaString(dir))
-		// write header
-		if err := tw.WriteHeader(header); err != nil {
-			return err
-		}
-		// if not a dir, write file content
-		if !fi.IsDir() {
-			data, err := os.Open(file)
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(tw, data); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-
-	// produce tar
-	if err := tw.Close(); err != nil {
-		return err
-	}
-	// produce gzip
-	if err := zr.Close(); err != nil {
-		return err
-	}
-	//
-	return nil
 }

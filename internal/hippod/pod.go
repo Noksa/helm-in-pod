@@ -347,7 +347,10 @@ func (m *Manager) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string
 	buffer := &bytes.Buffer{}
 	srcPath = filepath.Clean(srcPath)
 	destPath = filepath.Clean(destPath)
-	err := helmtar.Compress(srcPath, destPath, buffer)
+	err := helmtar.CompressMulti([]helmtar.BundleEntry{{
+		SrcPath:  srcPath,
+		DestPath: destPath,
+	}}, buffer)
 	if err != nil {
 		return err
 	}
