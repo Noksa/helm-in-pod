@@ -36,7 +36,7 @@ type UserInfo struct {
 func (m *Manager) GetPodUserInfo(pod *corev1.Pod) (*UserInfo, error) {
 	var stdout string
 
-	err := hipretry.Retry(3, func() error {
+	err := hipretry.RetryWithContext(m.ctx, 3, func() error {
 		logz.Pod().Debug().Msg("Determining user home directory")
 		var stderr string
 		var err error
@@ -87,7 +87,7 @@ func (m *Manager) SyncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOpti
 		return nil
 	}
 
-	err := hipretry.Retry(opts.CopyAttempts, func() error {
+	err := hipretry.RetryWithContext(m.ctx, opts.CopyAttempts, func() error {
 		logz.Pod().Debug().Msgf("Creating %v/.config/helm directory", homeDirectory)
 		_, stderr, err := m.client().ExecInPod(
 			`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null`,
@@ -125,7 +125,7 @@ func (m *Manager) UpdateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 
 func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, isHelm4 bool) error {
 	if len(opts.UpdateRepo) == 0 {
-		return hipretry.Retry(opts.UpdateRepoAttempts, func() error {
+		return hipretry.RetryWithContext(m.ctx, opts.UpdateRepoAttempts, func() error {
 			logz.Pod().Info().Msgf("Fetching updates from %v helm repositories", color.GreenString("all"))
 			cmdToUse := "helm repo update"
 			if !isHelm4 {
@@ -144,7 +144,7 @@ func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 
 	var errs []error
 	for _, repo := range opts.UpdateRepo {
-		err := hipretry.Retry(opts.UpdateRepoAttempts, func() error {
+		err := hipretry.RetryWithContext(m.ctx, opts.UpdateRepoAttempts, func() error {
 			logz.Pod().Info().Msgf("Fetching updates from %v helm repository", color.CyanString(repo))
 			cmdToUse := fmt.Sprintf("helm repo update %v", repo)
 			if !isHelm4 {
