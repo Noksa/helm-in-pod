@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -121,6 +122,32 @@ var _ = Describe("CompressMulti", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(files).To(HaveKeyWithValue("/dest/root.txt", "root"))
 			Expect(files).To(HaveKeyWithValue("/dest/sub/child.txt", "child"))
+		})
+
+		// Regression test for the fd-leak bug: a defer inside filepath.Walk's callback
+		// defers file.Close() until the entire Walk returns, not until the end of the
+		// current iteration. For bundles with hundreds of files this exhausts the
+		// per-process fd limit (RLIMIT_NOFILE, typically 256 on macOS / 1024 on Linux)
+		// and causes EMFILE errors mid-walk. This test uses 512 files — above the macOS
+		// default soft limit of 256 — to catch any regression.
+		It("does not exhaust file descriptors when compressing large bundles", func() {
+			const fileCount = 512
+			srcDir := filepath.Join(tmpDir, "large-bundle")
+			Expect(os.MkdirAll(srcDir, 0755)).To(Succeed())
+			for i := 0; i < fileCount; i++ {
+				name := filepath.Join(srcDir, fmt.Sprintf("file-%04d.yaml", i))
+				Expect(os.WriteFile(name, []byte(fmt.Sprintf("index: %d\n", i)), 0644)).To(Succeed())
+			}
+
+			var buf bytes.Buffer
+			Expect(CompressMulti([]BundleEntry{{
+				SrcPath:  srcDir,
+				DestPath: "/dest",
+			}}, &buf)).To(Succeed(), "CompressMulti must not return EMFILE even for large bundles")
+
+			files, err := extractTarGz(&buf)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(files).To(HaveLen(fileCount + 1)) // files + the root dir entry
 		})
 	})
 

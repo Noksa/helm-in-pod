@@ -38,7 +38,6 @@ func CompressMulti(entries []BundleEntry, buf io.Writer) error {
 	return zr.Close()
 }
 
-
 // addToTar walks the source path and adds all files/directories to the tar writer
 // with the correct destination path inside the pod.
 func addToTar(tw *tar.Writer, src string, destPath string) error {
@@ -80,17 +79,21 @@ func addToTar(tw *tar.Writer, src string, destPath string) error {
 			return err
 		}
 
-		if !fi.IsDir() {
-			data, err := os.Open(file)
-			if err != nil {
-				return err
-			}
-			defer func() { _ = data.Close() }()
-
-			if _, err := io.Copy(tw, data); err != nil {
-				return err
-			}
+		if fi.IsDir() {
+			return nil
 		}
-		return nil
+
+		// Open, copy, and close the file immediately — do NOT use defer here.
+		// defer inside a filepath.Walk callback defers until the entire Walk
+		// returns, leaving every opened file descriptor alive for the whole
+		// traversal. For bundles with hundreds of files this exhausts the
+		// per-process fd limit (typically 1024) and causes EMFILE errors.
+		data, err := os.Open(file)
+		if err != nil {
+			return err
+		}
+		_, copyErr := io.Copy(tw, data)
+		_ = data.Close()
+		return copyErr
 	})
 }
