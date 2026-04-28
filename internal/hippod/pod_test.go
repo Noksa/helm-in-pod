@@ -1,9 +1,14 @@
 package hippod
 
 import (
+	"context"
+	"errors"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/noksa/helm-in-pod/internal/hiperrors"
 )
 
 var _ = Describe("parseToleration", func() {
@@ -133,5 +138,70 @@ var _ = Describe("NodeSelector", func() {
 	It("should handle empty node selector", func() {
 		input := map[string]string{}
 		Expect(input).To(BeEmpty())
+	})
+})
+
+var _ = Describe("handleTerminalPhase", func() {
+	var m *Manager
+
+	BeforeEach(func() {
+		m = &Manager{}
+	})
+
+	It("returns nil for a Succeeded pod", func() {
+		err := m.handleTerminalPhase(context.Background(), &corev1.Pod{}, corev1.PodSucceeded)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("returns a pod-failed error when phase is Failed and exit code is unknown", func() {
+		err := m.handleTerminalPhase(context.Background(), &corev1.Pod{}, corev1.PodFailed)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("pod failed"))
+	})
+
+	It("returns ctx.Err() when context is already canceled and phase is Failed", func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		err := m.handleTerminalPhase(ctx, &corev1.Pod{}, corev1.PodFailed)
+		Expect(errors.Is(err, context.Canceled)).To(BeTrue())
+	})
+
+	It("returns ExitCodeError when the container status carries an exit code", func() {
+		pod := &corev1.Pod{
+			Status: corev1.PodStatus{
+				ContainerStatuses: []corev1.ContainerStatus{
+					{State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{ExitCode: 42},
+					}},
+				},
+			},
+		}
+		err := m.handleTerminalPhase(context.Background(), pod, corev1.PodFailed)
+		Expect(err).To(HaveOccurred())
+		var exitErr *hiperrors.ExitCodeError
+		Expect(errors.As(err, &exitErr)).To(BeTrue())
+		Expect(exitErr.Code).To(Equal(int32(42)))
+	})
+})
+
+var _ = Describe("exitCodeFromContainerStatuses", func() {
+	It("returns ExitCodeUnknown when statuses is empty", func() {
+		Expect(exitCodeFromContainerStatuses(nil)).To(Equal(int32(hiperrors.ExitCodeUnknown)))
+	})
+
+	It("returns ExitCodeUnknown when no container is terminated", func() {
+		statuses := []corev1.ContainerStatus{
+			{State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+		}
+		Expect(exitCodeFromContainerStatuses(statuses)).To(Equal(int32(hiperrors.ExitCodeUnknown)))
+	})
+
+	It("returns the exit code of the first terminated container", func() {
+		statuses := []corev1.ContainerStatus{
+			{State: corev1.ContainerState{
+				Terminated: &corev1.ContainerStateTerminated{ExitCode: 137},
+			}},
+		}
+		Expect(exitCodeFromContainerStatuses(statuses)).To(Equal(int32(137)))
 	})
 })
