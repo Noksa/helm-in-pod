@@ -291,7 +291,7 @@ func (m *Manager) CopyFilesBundleWithBootInfo(pod *corev1.Pod, entries []helmtar
 	)
 
 	var info *BootInfo
-	err := hipretry.Retry(attempts, func() error {
+	err := hipretry.RetryWithContext(m.ctx, attempts, func() error {
 		logz.HostPod().Info().Msg("Copying files bundle and collecting pod boot info")
 
 		var stdout bytes.Buffer
@@ -358,7 +358,7 @@ func (m *Manager) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string
 	dir := filepath.Dir(destPath)
 	cmd := fmt.Sprintf("mkdir -p %s && tar zxf - -C /", dir)
 
-	return hipretry.Retry(attempts, func() error {
+	return hipretry.RetryWithContext(m.ctx, attempts, func() error {
 		logz.HostPod().Info().Msgf("Copying %v to %v", color.CyanString(srcPath), color.MagentaString(destPath))
 
 		_, stderr, err := m.client().ExecInPod(cmd, Namespace, pod.Name, pod.Namespace,
@@ -395,7 +395,7 @@ func (m *Manager) CopyFileFromPod(pod *corev1.Pod, podPath string, hostPath stri
 	podPath = filepath.Clean(podPath)
 	hostPath = filepath.Clean(hostPath)
 
-	return hipretry.Retry(attempts, func() error {
+	return hipretry.RetryWithContext(m.ctx, attempts, func() error {
 		isFile := m.isPodPathRegularFile(pod, podPath)
 
 		var tarCmd string
@@ -628,7 +628,7 @@ func (m *Manager) DeleteDaemonPod(name string) error {
 }
 
 func (m *Manager) AnnotatePod(pod *corev1.Pod, annotations map[string]string) error {
-	return hipretry.Retry(3, func() error {
+	return hipretry.RetryWithBackoff(m.ctx, hipretry.K8sAPIBackoff(3), func() error {
 		// Get latest pod state before each attempt
 		latestPod, err := m.client().ClientSet().CoreV1().Pods(pod.Namespace).Get(m.ctx, pod.Name, metav1.GetOptions{})
 		if err != nil {
