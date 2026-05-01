@@ -2,43 +2,49 @@
 
 ## Development Commands
 
-- `make install-local`: Build + install plugin locally for testing (`helm in-pod ...`). Always run this after changes before manual testing.
-- `make lint`: Full verification (go mod tidy, fmt, goimports, vet, modernize, golangci-lint). **Run first**. Includes e2e build tag.
-- `make test` / `make test-unit`: Ginkgo unit tests (skips e2e package).
-- `make test-e2e`: E2E tests against kind cluster (`helm-in-pod-e2e`). Use `FOCUS="pattern"` to run specific tests.
-- `make test-e2e-full`: Full cycle (setup, test, teardown).
+- `make install-local`: Build + install plugin locally (`helm in-pod ...`). Run after changes for testing.
+- `make lint`: Full verification (go mod tidy, fmt, goimports, vet, modernize, golangci-lint). Includes e2e build tag. Run first.
+- `make test` / `make test-unit`: Ginkgo unit tests (skips e2e).
+- `make test-e2e`: E2E tests against kind cluster. Use `FOCUS="pattern"` for specific tests. Reuses cluster if exists.
+- `make test-e2e-full`: Full e2e cycle (setup, test, teardown).
 - `make build`: Builds `bin/in-pod`.
 
-Run in this order: `make lint && make test && make test-e2e` (or subset).
+Run order: `make lint && make test && make test-e2e`.
 
 Use `make help` for all targets.
 
 ## Testing Quirks
 
-- **Ginkgo v2** everywhere. Tests in `cmd/` (unit) + `e2e/` (integration against real k8s).
-- Build tag `e2e` required for e2e package (`-tags=e2e` in vet/lint).
-- E2E uses `e2e/setup-cluster.sh` + kind. Cluster is reused if present (`make test-e2e-prepare`).
-- Many focused test files (`*_test.go`) for specific features (daemon, copy, volumes, active-deadline, etc.).
-- Tests create `helm-in-pod` namespace + `cluster-admin` ServiceAccount. Cleanup via `helm in-pod purge --all`.
+- Ginkgo v2 for all tests. Unit in `cmd/`, e2e in `e2e/` (requires `-tags=e2e` for lint/vet).
+- E2E: Uses `e2e/setup-cluster.sh` + kind. Creates `helm-in-pod` namespace + `cluster-admin` ServiceAccount.
+- Focused e2e files for features: daemon, copy, volumes, active-deadline, etc.
+- Cleanup e2e: `helm in-pod purge --all`.
 
 ## Architecture
 
-- Helm plugin (`plugin.yaml` points to `bin/in-pod`).
-- Cobra commands in `cmd/` (`root.go`, `exec.go`, `daemon/*.go`, `purge.go`).
-- Core Kubernetes/pod logic in `internal/`.
-- Daemon mode (`daemon start/exec/shell`) reuses long-running pod for speed.
-- Logging via zerolog with custom host/pod formatting.
-- Exit codes from inner command are propagated exactly.
+- Helm plugin: `plugin.yaml` points to `bin/in-pod`.
+- Cobra commands: `cmd/` (root.go, exec.go, daemon/*.go, purge.go).
+- Core logic: `internal/`.
+- Daemon: Reuses long-running pod. See DAEMON.md.
+- Logging: Zerolog with host/pod formatting.
+- Exit codes: Propagated from inner command.
 
 ## Local Dev Gotchas
 
-- After `make install-local`, test with `helm in-pod exec -- "kubectl get pods -A"`.
-- Use `--verbose-logs` for debug output.
-- `HELM_IN_POD_DAEMON_NAME` env var for daemon workflows.
-- Plugin hooks run `scripts/install.sh` on `helm plugin install` (downloads release). Local dev bypasses this via `install-local.sh`.
+- Test after `make install-local`: `helm in-pod exec -- "kubectl get pods -A"`.
+- Debug: `--verbose-logs`.
+- Daemon: Set `HELM_IN_POD_DAEMON_NAME` env var.
+- Install hook: `scripts/install.sh` downloads release; local dev uses `install-local.sh`.
+
+## After Making Changes
+
+- Run `make lint` at minimum; ensure it passes.
+- For significant changes, run `make test` and verify success.
+- Also run `make test-e2e` to catch issues early (will fail in MR anyway).
 
 ## Verification
 
-Always run `make lint` before committing. CI runs lint → unit → e2e on multiple k8s versions.
+- Always `make lint` before committing.
+- CI: lint → unit → e2e on multiple k8s versions.
 
-See `DAEMON.md`, `RELEASE_NOTES.md`, and `e2e/` for deeper feature specifics.
+See DAEMON.md, RELEASE_NOTES.md, e2e/ for details.
