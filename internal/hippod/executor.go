@@ -17,7 +17,6 @@ import (
 	"helm.sh/helm/v4/pkg/cli"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
@@ -373,32 +372,113 @@ func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, c
 	return err
 }
 
+// waitForPodCompletion blocks until the pod reaches a terminal phase
+// (Succeeded or Failed). It uses a Kubernetes Watch so the API server pushes
+// phase changes instead of being polled — eliminating the 600 GET/min flood
+// that the previous 100ms poll loop produced.
+//
+// If the Watch cannot be started (e.g. Watch is restricted by RBAC), the
+// function falls back to polling at 500ms intervals, which is still 5x fewer
+// API calls than the old implementation.
 func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) error {
-	logz.Host().Debug().Msg("Waiting 60s until pod phase is changed to failed/succeeded")
+	logz.Host().Debug().Msgf("Waiting for pod %v to reach a terminal phase", pod.Name)
 
-	var phase corev1.PodPhase
-
-	err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 60*time.Second, true, func(pollCtx context.Context) (bool, error) {
-		p, getErr := m.GetPodPhase(pollCtx, pod)
-		if getErr != nil {
-			return false, nil
-		}
-		phase = p
-		return phase == corev1.PodSucceeded || phase == corev1.PodFailed, nil
+	watcher, err := m.client().ClientSet().CoreV1().Pods(pod.Namespace).Watch(ctx, metav1.ListOptions{
+		FieldSelector:   fmt.Sprintf("metadata.name=%s", pod.Name),
+		ResourceVersion: pod.ResourceVersion,
 	})
-
-	logz.Host().Debug().Msgf("Pod got phase: %v", color.CyanString("%v", phase))
-
-	if wait.Interrupted(err) {
-		return fmt.Errorf("unexpected pod phase: %v", phase)
+	if err != nil {
+		// Watch unavailable (RBAC restriction or transient API error).
+		// Fall back to polling at 500ms so we still wait for the terminal phase
+		// rather than checking once and returning with whatever phase is current.
+		logz.Host().Debug().Msgf("Watch unavailable, falling back to polling: %v", err)
+		return m.pollUntilPodCompletes(ctx, pod)
 	}
 
+	// defer closes the watcher on every return path. The anonymous function
+	// closes over the watcher variable — not its value — so it always stops
+	// whichever watcher is current when the function returns, including after
+	// the channel-reopen path below reassigns the variable.
+	defer func() { watcher.Stop() }()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case event, ok := <-watcher.ResultChan():
+			if !ok {
+				// The API server closed the channel (e.g. the default 5-minute
+				// server-side Watch timeout). Fetch the current pod state to avoid
+				// missing a terminal event that arrived during the gap, then
+				// re-open the Watch from the latest ResourceVersion.
+				logz.Host().Debug().Msg("Watch channel closed, re-opening")
+				watcher.Stop()
+				latestPod, getErr := m.client().ClientSet().CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
+				if getErr == nil {
+					if latestPod.Status.Phase == corev1.PodSucceeded || latestPod.Status.Phase == corev1.PodFailed {
+						return m.handleTerminalPhase(ctx, latestPod, latestPod.Status.Phase)
+					}
+					watcher, err = m.client().ClientSet().CoreV1().Pods(pod.Namespace).Watch(ctx, metav1.ListOptions{
+						FieldSelector:   fmt.Sprintf("metadata.name=%s", pod.Name),
+						ResourceVersion: latestPod.ResourceVersion,
+					})
+				} else {
+					watcher, err = m.client().ClientSet().CoreV1().Pods(pod.Namespace).Watch(ctx, metav1.ListOptions{
+						FieldSelector: fmt.Sprintf("metadata.name=%s", pod.Name),
+					})
+				}
+				if err != nil {
+					return fmt.Errorf("failed to re-open watch: %w", err)
+				}
+				continue
+			}
+			p, ok := event.Object.(*corev1.Pod)
+			if !ok {
+				continue
+			}
+			if p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed {
+				// Use the pod object from the event — it carries up-to-date
+				// ContainerStatuses with the exit code already populated.
+				return m.handleTerminalPhase(ctx, p, p.Status.Phase)
+			}
+		}
+	}
+}
+
+// pollUntilPodCompletes is the Watch fallback: polls at 500ms intervals until
+// the pod reaches a terminal phase or ctx is canceled.
+func (m *Manager) pollUntilPodCompletes(ctx context.Context, pod *corev1.Pod) error {
+	t := time.NewTimer(0) // fire immediately on first iteration
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+			p, getErr := m.client().ClientSet().CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
+			if getErr != nil {
+				t.Reset(500 * time.Millisecond)
+				continue
+			}
+			if p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed {
+				return m.handleTerminalPhase(ctx, p, p.Status.Phase)
+			}
+			t.Reset(500 * time.Millisecond)
+		}
+	}
+}
+
+// handleTerminalPhase interprets a terminal pod phase and returns the
+// appropriate error (nil for Succeeded, exit-code error for Failed).
+// The exit code is read directly from the pod's ContainerStatuses so that
+// the function stays free of API calls and is straightforward to test.
+func (m *Manager) handleTerminalPhase(ctx context.Context, pod *corev1.Pod, phase corev1.PodPhase) error {
+	logz.Host().Debug().Msgf("Pod reached terminal phase: %v", color.CyanString("%v", phase))
 	if phase == corev1.PodFailed {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		// Extract the actual exit code from the container status
-		exitCode := m.getContainerExitCode(pod)
+		exitCode := exitCodeFromContainerStatuses(pod.Status.ContainerStatuses)
 		if exitCode != hiperrors.ExitCodeUnknown {
 			logz.Pod().Info().Msgf("Command exited with code %d", exitCode)
 			return &hiperrors.ExitCodeError{Code: exitCode}
@@ -406,16 +486,6 @@ func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) err
 		return fmt.Errorf("pod failed")
 	}
 	return nil
-}
-
-// getContainerExitCode retrieves the exit code from the pod's container status.
-// Returns ExitCodeUnknown if the exit code cannot be determined.
-func (m *Manager) getContainerExitCode(pod *corev1.Pod) int32 {
-	myPod, err := m.client().ClientSet().CoreV1().Pods(pod.Namespace).Get(m.ctx, pod.Name, metav1.GetOptions{})
-	if err != nil {
-		return hiperrors.ExitCodeUnknown
-	}
-	return exitCodeFromContainerStatuses(myPod.Status.ContainerStatuses)
 }
 
 // exitCodeFromContainerStatuses extracts the exit code from container statuses.
