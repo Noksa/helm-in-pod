@@ -28,21 +28,15 @@ if ! KUBECONFIG="${E2E_KUBECONFIG}" kubectl cluster-info &>/dev/null; then
     exit 1
 fi
 
-# Check if ginkgo is installed
-if ! command -v ginkgo &>/dev/null; then
-    cyber_log "Installing ginkgo..."
-    go install github.com/onsi/ginkgo/v2/ginkgo@latest
-fi
-
 # Export kubeconfig for tests
 export KUBECONFIG="${E2E_KUBECONFIG}"
 export KIND_CLUSTER="${E2E_CLUSTER_NAME}"
 
-# Run tests
+# Run tests via go run (guarantees exact ginkgo version from go.mod, no CLI mismatch warning)
 cyber_log "Running e2e tests with kubeconfig: ${CYBER_G}${E2E_KUBECONFIG}${CYBER_X}"
 # Run with parallel execution for speed (each Describe gets its own process)
 # shellcheck disable=SC2086
 GINKGO_PROCS="${GINKGO_PROCS:-5}"
-ginkgo --tags=e2e --procs="${GINKGO_PROCS}" --silence-skips --timeout=20m $GINKGO_ARGS "$@" "${E2E_DIR}/"
+go run github.com/onsi/ginkgo/v2/ginkgo --tags=e2e --procs="${GINKGO_PROCS}" --silence-skips --timeout=20m $GINKGO_ARGS "$@" "${E2E_DIR}/"
 
 cyber_ok "E2E tests completed"

@@ -19,18 +19,15 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 # Test configuration
-GINKGO         := $(GOBIN)/ginkgo
 GINKGO_PROCS   ?= 5
 GINKGO_FLAGS   ?= --silence-skips --procs=$(GINKGO_PROCS) --randomize-all $(if $(RACE),--race --trace,)
 E2E_TIMEOUT    ?= 10m
 
 # Test runner macros
+# Use go run to guarantee exact version from go.mod (avoids CLI/package mismatch warning)
+GINKGO_RUN     := go run github.com/onsi/ginkgo/v2/ginkgo
 define run_tests
-	@if [ ! -f $(GINKGO) ]; then \
-		echo "-> installing ginkgo CLI..."; \
-		go install github.com/onsi/ginkgo/v2/ginkgo@latest; \
-	fi
-	@$(GINKGO) $(GINKGO_FLAGS) $(if $(2),--focus "$(2)",) $(1)
+	@$(GINKGO_RUN) $(GINKGO_FLAGS) $(if $(2),--focus "$(2)",) $(1)
 endef
 
 define run_e2e
@@ -124,7 +121,7 @@ test-plugin: ## Test plugin as Helm plugin (integration test)
 
 .PHONY: test-ci
 test-ci: ## Run tests in CI (race + randomized + reports)
-	@go run github.com/onsi/ginkgo/v2/ginkgo -r --race --trace \
+	@$(GINKGO_RUN) -r --race --trace \
 		--randomize-all --keep-going --cover --coverprofile=coverage.out \
 		--json-report=report.json --skip-package=e2e ./...
 
