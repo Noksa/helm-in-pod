@@ -40,6 +40,10 @@ The pod is deleted after the command completes, even on failure.`,
 			return fmt.Errorf("update-repo-attempts value can't be less 1")
 		}
 
+		// Make all retry loops inside the managers respect this command's context
+		// (so --timeout and signals cancel backoff sleeps).
+		internal.UseCommandContext(cmd.Context())
+
 		timeout := viper.GetDuration("timeout")
 		opts.Timeout = timeout + time.Minute*10
 

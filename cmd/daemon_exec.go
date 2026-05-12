@@ -29,6 +29,10 @@ func newDaemonExecCmd() *cobra.Command {
 			if len(args) == 0 {
 				return fmt.Errorf("specify command to run")
 			}
+
+			// Make retry loops respect the command context (timeout / signals)
+			internal.UseCommandContext(cmd.Context())
+
 			logz.Host().Debug().Msgf("Looking for %s daemon", color.CyanString(opts.Name))
 			pod, err := internal.Pod().GetDaemonPod(opts.Name)
 			if err != nil {

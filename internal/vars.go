@@ -54,3 +54,15 @@ func Namespace() *hipns.Manager {
 func Pod() *hippod.Manager {
 	return pod
 }
+
+// UseCommandContext replaces the internal managers with versions that use the
+// provided context (usually cmd.Context() from Cobra). This makes all retry
+// loops inside the managers respect --timeout and cancellation signals.
+// It must be called after InitManagers() in every command entry point.
+func UseCommandContext(ctx context.Context) {
+	if ctx == nil {
+		return
+	}
+	pod = pod.WithContext(ctx)
+	namespace = namespace.WithContext(ctx)
+}

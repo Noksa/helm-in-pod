@@ -23,6 +23,8 @@ All Helm repositories and configurations are already set up and ready to use.`,
 				return err
 			}
 
+			internal.UseCommandContext(cmd.Context())
+
 			logz.Host().Debug().Msgf("Looking for %s daemon", color.CyanString(name))
 			pod, err := internal.Pod().GetDaemonPod(name)
 			if err != nil {

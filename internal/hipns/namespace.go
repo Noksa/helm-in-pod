@@ -22,6 +22,14 @@ func NewManager(ctx context.Context) *Manager {
 	return &Manager{ctx: ctx}
 }
 
+// WithContext returns a copy of the manager using the provided context.
+func (m *Manager) WithContext(ctx context.Context) *Manager {
+	if ctx == nil {
+		ctx = m.ctx
+	}
+	return &Manager{ctx: ctx}
+}
+
 func (m *Manager) PrepareNs() error {
 	cs := operatorkclient.DefaultClient().ClientSet()
 	ns, err := cs.CoreV1().Namespaces().Get(m.ctx, Name, metav1.GetOptions{})

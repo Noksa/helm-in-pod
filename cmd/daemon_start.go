@@ -38,6 +38,8 @@ Use 'daemon exec' to run commands and 'daemon stop' to tear down the pod.`,
 				return fmt.Errorf("update-repo-attempts value can't be less 1")
 			}
 
+			internal.UseCommandContext(cmd.Context())
+
 			timeout := viper.GetDuration("timeout")
 			if timeout == 0 {
 				timeout = time.Hour * 2
