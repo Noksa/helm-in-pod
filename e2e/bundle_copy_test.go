@@ -17,10 +17,10 @@ import (
 // This test suite exercises the batch bundle copy optimization introduced in
 // feat/batch-copy-bundle. It replicates the real-world usage pattern:
 //
-//   helm in-pod exec \
-//     --copy-files ./chart:/tmp/chart \
-//     --copy-files ./values-env.yaml:/tmp/values-env.yaml \
-//     -- helm template myapp /tmp/chart -f /tmp/values-env.yaml
+//	helm in-pod exec \
+//	  --copy-files ./chart:/tmp/chart \
+//	  --copy-files ./values-env.yaml:/tmp/values-env.yaml \
+//	  -- helm template myapp /tmp/chart -f /tmp/values-env.yaml
 //
 // That is: a full Helm chart directory (Chart.yaml + templates/) plus one or more
 // per-environment override YAML files, all sent to the pod in a single ExecInPod

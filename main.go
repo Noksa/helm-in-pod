@@ -41,8 +41,7 @@ func main() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	err := cmd.ExecuteRoot()
 	if err != nil {
-		var exitErr *hiperrors.ExitCodeError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*hiperrors.ExitCodeError](err); ok {
 			os.Exit(int(exitErr.Code))
 		}
 		log.Fatal().Msg(err.Error())

@@ -134,7 +134,7 @@ var _ = Describe("CompressMulti", func() {
 			const fileCount = 512
 			srcDir := filepath.Join(tmpDir, "large-bundle")
 			Expect(os.MkdirAll(srcDir, 0755)).To(Succeed())
-			for i := 0; i < fileCount; i++ {
+			for i := range fileCount {
 				name := filepath.Join(srcDir, fmt.Sprintf("file-%04d.yaml", i))
 				Expect(os.WriteFile(name, []byte(fmt.Sprintf("index: %d\n", i)), 0644)).To(Succeed())
 			}
