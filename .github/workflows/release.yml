@@ -55,13 +55,26 @@ jobs:
 
   plugin-package:
     name: Package & Sign Plugin
-    needs: build
     runs-on: ubuntu-latest
     permissions:
       packages: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Compute release metadata
+        id: meta
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          if [[ "$version" =~ -(alpha|beta|rc) ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install Helm 4
         uses: azure/setup-helm@v4
@@ -79,33 +92,32 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package and sign plugin
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          SIGNING_KEY_EMAIL: ${{ vars.SIGNING_KEY_EMAIL }}
+          GPG_KEYRING_BASE64: ${{ secrets.GPG_KEYRING_BASE64 }}
         run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-
-          # Create clean plugin directory with only what's needed
           mkdir -p plugin-staging/scripts
           cp plugin.yaml plugin-staging/
           cp scripts/install.sh plugin-staging/scripts/
-
-          # Set version from tag
           sed -i "s/^version:.*/version: \"${VERSION}\"/" plugin-staging/plugin.yaml
-
-          base64 -d <<< "${{ secrets.GPG_KEYRING_BASE64 }}" > secring.gpg
-          helm plugin package --sign --key '${{ vars.SIGNING_KEY_EMAIL }}' --keyring secring.gpg plugin-staging
+          printf '%s' "$GPG_KEYRING_BASE64" | base64 -d > secring.gpg
+          helm plugin package --sign --key "$SIGNING_KEY_EMAIL" --keyring secring.gpg plugin-staging
           rm -f secring.gpg
-          ls -la in-pod-*.tgz in-pod-*.prov
+          ls -la "in-pod-${VERSION}.tgz" "in-pod-${VERSION}.tgz.prov"
 
       - name: Push to OCI registry
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          IS_PRERELEASE: ${{ steps.meta.outputs.is_prerelease }}
         run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
           PACKAGE="in-pod-${VERSION}.tgz"
           REPO="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/helm-in-pod/in-pod"
           oras push "${REPO}:${VERSION}" \
             --artifact-type application/vnd.helm.plugin.v1+json \
             "$PACKAGE" \
             "$PACKAGE.prov"
-          # Only tag stable releases as latest
-          if ! echo "$VERSION" | grep -qE '(alpha|beta|rc)'; then
+          if [ "$IS_PRERELEASE" = "false" ]; then
             oras tag "${REPO}:${VERSION}" latest
           fi
 
@@ -151,7 +163,7 @@ jobs:
             generated/*.tar.gz
             generated/*.tgz
             generated/*.prov
-          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') || contains(github.ref, 'rc') }}
+          prerelease: ${{ needs.plugin-package.outputs.is_prerelease == 'true' }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
