@@ -111,6 +111,7 @@ jobs:
             --artifact-type application/vnd.helm.plugin.v1+json \
             "$PACKAGE" \
             "$PACKAGE.prov"
+          oras tag "${REPO}:${VERSION}" latest
 
       - name: Upload plugin tarball
         uses: actions/upload-artifact@v4
