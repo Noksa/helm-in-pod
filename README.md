@@ -58,6 +58,7 @@ When `helm` runs commands from your local machine, network latency to distant Ku
 > ```bash
 > helm plugin install --version v0.8.0 https://github.com/Noksa/helm-in-pod
 > ```
+> See [#20](https://github.com/Noksa/helm-in-pod/issues/20) for details.
 
 ### 🖥️ Supported Platforms
 
