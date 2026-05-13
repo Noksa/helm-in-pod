@@ -89,3 +89,15 @@ jobs:
       - name: Teardown kind cluster
         if: always()
         run: make test-e2e-teardown
+
+  e2e-result:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [e2e-tests]
+    if: always()
+    steps:
+      - run: |
+          if [ "${{ needs.e2e-tests.result }}" != "success" ]; then
+            echo "E2E tests failed: ${{ needs.e2e-tests.result }}"
+            exit 1
+          fi
