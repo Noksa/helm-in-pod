@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -9,10 +11,12 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"helm.sh/helm/v4/pkg/cli"
 
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
 	"github.com/noksa/helm-in-pod/internal/helmtar"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/logz"
 )
 
@@ -75,7 +79,27 @@ The pod is deleted after the command completes, even on failure.`,
 
 		cmdToUse := strings.Join(args, " ")
 
-		bundle := make([]helmtar.BundleEntry, 0, len(opts.FilesAsMap))
+		// Generate the wrapped script
+		tempScriptFile, err := os.CreateTemp("", hipconsts.HelmInPodNamespace)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			_ = tempScriptFile.Close()
+			_ = os.RemoveAll(tempScriptFile.Name())
+		}()
+		if err := os.Chmod(tempScriptFile.Name(), os.ModePerm); err != nil {
+			return err
+		}
+		for _, s := range []string{"#!/bin/sh\nset -eu\n", cmdToUse, "\n"} {
+			if _, wErr := tempScriptFile.WriteString(s); wErr != nil {
+				return wErr
+			}
+		}
+		_ = tempScriptFile.Close()
+
+		// Build bundle: user files + wrapped script + repositories.yaml
+		bundle := make([]helmtar.BundleEntry, 0, len(opts.FilesAsMap)+2)
 		for src, dest := range opts.FilesAsMap {
 			expandedSrc, expandErr := expand(src)
 			if expandErr != nil {
@@ -83,8 +107,21 @@ The pod is deleted after the command completes, even on failure.`,
 			}
 			bundle = append(bundle, helmtar.BundleEntry{SrcPath: expandedSrc, DestPath: dest})
 		}
+		bundle = append(bundle, helmtar.BundleEntry{SrcPath: tempScriptFile.Name(), DestPath: hipconsts.StagedScriptPath})
 
-		bootInfo, err := internal.Pod().CopyFilesBundleWithBootInfo(pod, bundle, nil, opts.CopyAttempts)
+		repoConfigStaged := false
+		if opts.CopyRepo {
+			settings := cli.New()
+			_, statErr := os.Stat(settings.RepositoryConfig)
+			if statErr == nil {
+				bundle = append(bundle, helmtar.BundleEntry{SrcPath: settings.RepositoryConfig, DestPath: hipconsts.StagedRepoConfigPath})
+				repoConfigStaged = true
+			} else if !errors.Is(statErr, os.ErrNotExist) {
+				return statErr
+			}
+		}
+
+		bootInfo, err := internal.Pod().CopyFilesBundleWithBootInfo(pod, bundle, nil, opts.CopyAttempts, repoConfigStaged)
 		if err != nil {
 			return err
 		}
@@ -93,14 +130,14 @@ The pod is deleted after the command completes, even on failure.`,
 			logz.Pod().Warn().Msg("helm is not installed in the image, all helm prerequisites will be skipped. If the passed command contains helm calls, it will fail")
 		}
 
-		if opts.CopyRepo && bootInfo.HelmFound {
-			err = internal.Pod().SyncHelmRepositories(pod, opts, bootInfo.HomeDirectory, bootInfo.IsHelm4)
+		if opts.CopyRepo && bootInfo.HelmFound && repoConfigStaged {
+			err = internal.Pod().SyncHelmRepositories(pod, opts, bootInfo.HomeDirectory, bootInfo.IsHelm4, true)
 			if err != nil {
 				return err
 			}
 		}
 
-		execErr := internal.Pod().ExecuteCommand(cmd.Context(), pod, cmdToUse, opts)
+		execErr := internal.Pod().ExecuteCommand(cmd.Context(), pod, cmdToUse, opts, true)
 
 		// Copy files from pod to host (even if command failed, user may want artifacts)
 		if len(opts.CopyFrom) > 0 {

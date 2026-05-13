@@ -88,7 +88,7 @@ Use 'daemon exec' to run commands and 'daemon stop' to tear down the pod.`,
 			}
 
 			if opts.CopyRepo && helmFound {
-				err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, userInfo.HomeDirectory, isHelm4)
+				err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, userInfo.HomeDirectory, isHelm4, false)
 				if err != nil {
 					return err
 				}

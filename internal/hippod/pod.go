@@ -288,7 +288,9 @@ type BootInfo struct {
 // ExecInPod call and simultaneously collects boot metadata (home dir, user, helm version).
 // The pod-side command emits "HOME:::whoami:::id:::helmversion\n" on stdout, then
 // extracts the multi-entry tar from stdin at their destination paths.
-func (m *Manager) CopyFilesBundleWithBootInfo(pod *corev1.Pod, entries []helmtar.BundleEntry, cleanPaths []string, attempts int) (*BootInfo, error) {
+// When repoConfigStaged is true, the boot command also moves StagedRepoConfigPath
+// into $HOME/.config/helm/repositories.yaml after extraction.
+func (m *Manager) CopyFilesBundleWithBootInfo(pod *corev1.Pod, entries []helmtar.BundleEntry, cleanPaths []string, attempts int, repoConfigStaged bool) (*BootInfo, error) {
 	buf := &bytes.Buffer{}
 	if err := helmtar.CompressMulti(entries, buf); err != nil {
 		return nil, fmt.Errorf("building bundle tar: %w", err)
@@ -299,9 +301,13 @@ func (m *Manager) CopyFilesBundleWithBootInfo(pod *corev1.Pod, entries []helmtar
 	if len(cleanPaths) > 0 {
 		cleanCmd = fmt.Sprintf("rm -rf %s; ", strings.Join(cleanPaths, " "))
 	}
+	moveRepoCmd := ""
+	if repoConfigStaged {
+		moveRepoCmd = fmt.Sprintf(` && mkdir -p "${HOME}/.config/helm" && mv %s "${HOME}/.config/helm/repositories.yaml"`, hipconsts.StagedRepoConfigPath)
+	}
 	cmd := fmt.Sprintf(
-		`printf '%%s:::%%s:::%%s:::%%s\n' "${HOME}" "$(whoami)" "$(id)" "$(helm version --template '{{ $.Version }}' 2>/dev/null || echo none)"; %star zxf - -C /`,
-		cleanCmd,
+		`printf '%%s:::%%s:::%%s:::%%s\n' "${HOME}" "$(whoami)" "$(id)" "$(helm version --template '{{ $.Version }}' 2>/dev/null || echo none)"; %star zxf - -C /%s`,
+		cleanCmd, moveRepoCmd,
 	)
 
 	var info *BootInfo

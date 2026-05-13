@@ -24,4 +24,12 @@ const (
 
 	// WrappedScriptPath is the fixed path inside the pod for the user command script.
 	WrappedScriptPath = "/tmp/hip-wrapped-script.sh"
+
+	// StagedScriptPath is where the wrapped script is placed during bundle copy,
+	// before being moved to WrappedScriptPath to trigger execution.
+	StagedScriptPath = "/tmp/hip-staged-script.sh"
+
+	// StagedRepoConfigPath is a temporary path where repositories.yaml is placed
+	// during bundle copy, before being moved to $HOME/.config/helm/ by the boot command.
+	StagedRepoConfigPath = "/tmp/hip-repositories.yaml"
 )

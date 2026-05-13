@@ -58,7 +58,7 @@ func newDaemonExecCmd() *cobra.Command {
 
 				switch {
 				case opts.CopyRepo:
-					err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, homeDirectory, isHelm4)
+					err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, homeDirectory, isHelm4, false)
 					if err != nil {
 						return err
 					}

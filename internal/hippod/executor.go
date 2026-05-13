@@ -76,34 +76,36 @@ func (m *Manager) GetPodUserInfo(pod *corev1.Pod) (*UserInfo, error) {
 	}, nil
 }
 
-func (m *Manager) SyncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, homeDirectory string, isHelm4 bool) error {
-	settings := cli.New()
-	_, statErr := os.Stat(settings.RepositoryConfig)
-	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
-		return statErr
-	}
-	if statErr != nil {
-		return nil
-	}
-
-	err := hipretry.RetryWithContext(m.ctx, opts.CopyAttempts, func() error {
-		logz.Pod().Debug().Msgf("Creating %v/.config/helm directory", homeDirectory)
-		_, stderr, err := m.client().ExecInPod(
-			`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null`,
-			Namespace, pod.Name, pod.Namespace)
-		if err != nil {
-			return fmt.Errorf("%s: %w", stderr, err)
+func (m *Manager) SyncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, homeDirectory string, isHelm4 bool, repoPreCopied bool) error {
+	if !repoPreCopied {
+		settings := cli.New()
+		_, statErr := os.Stat(settings.RepositoryConfig)
+		if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+			return statErr
 		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
+		if statErr != nil {
+			return nil
+		}
 
-	err = m.CopyFileToPod(pod, settings.RepositoryConfig,
-		fmt.Sprintf("%v/.config/helm/repositories.yaml", homeDirectory), opts.CopyAttempts)
-	if err != nil {
-		return err
+		err := hipretry.RetryWithContext(m.ctx, opts.CopyAttempts, func() error {
+			logz.Pod().Debug().Msgf("Creating %v/.config/helm directory", homeDirectory)
+			_, stderr, err := m.client().ExecInPod(
+				`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null`,
+				Namespace, pod.Name, pod.Namespace)
+			if err != nil {
+				return fmt.Errorf("%s: %w", stderr, err)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		err = m.CopyFileToPod(pod, settings.RepositoryConfig,
+			fmt.Sprintf("%v/.config/helm/repositories.yaml", homeDirectory), opts.CopyAttempts)
+		if err != nil {
+			return err
+		}
 	}
 
 	return m.updateHelmRepositories(pod, opts, isHelm4)
@@ -189,35 +191,51 @@ func (m *Manager) CopyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions, ex
 	return nil
 }
 
-// ExecuteCommand copies the wrapped script to the pod and streams execution until
-// the pod completes. Always call after all preprocessing (file copies, repo sync)
-// so the pod init script does not start the user command prematurely.
-func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command string, opts cmdoptions.ExecOptions) error {
+// ExecuteCommand copies the wrapped script to the pod (unless scriptPreCopied is true)
+// and streams execution until the pod completes. Always call after all preprocessing
+// (file copies, repo sync) so the pod init script does not start the user command prematurely.
+func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command string, opts cmdoptions.ExecOptions, scriptPreCopied bool) error {
 	copyFromMode := len(opts.CopyFrom) > 0
 
-	tempScriptFile, err := os.CreateTemp("", hipconsts.HelmInPodNamespace)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = tempScriptFile.Close()
-		_ = os.RemoveAll(tempScriptFile.Name())
-	}()
+	if scriptPreCopied {
+		// Script was pre-staged in the bundle; move it to trigger execution.
+		err := hipretry.RetryWithContext(m.ctx, opts.CopyAttempts, func() error {
+			_, stderr, err := m.client().ExecInPod(
+				fmt.Sprintf("mv %s %s", hipconsts.StagedScriptPath, hipconsts.WrappedScriptPath),
+				Namespace, pod.Name, pod.Namespace)
+			if err != nil {
+				return fmt.Errorf("%s: %w", stderr, err)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	} else {
+		tempScriptFile, err := os.CreateTemp("", hipconsts.HelmInPodNamespace)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			_ = tempScriptFile.Close()
+			_ = os.RemoveAll(tempScriptFile.Name())
+		}()
 
-	if err := os.Chmod(tempScriptFile.Name(), os.ModePerm); err != nil {
-		return err
-	}
-	for _, s := range []string{"#!/bin/sh\nset -eu\n", command, "\n"} {
-		if _, wErr := tempScriptFile.WriteString(s); wErr != nil {
-			return wErr
+		if err := os.Chmod(tempScriptFile.Name(), os.ModePerm); err != nil {
+			return err
+		}
+		for _, s := range []string{"#!/bin/sh\nset -eu\n", command, "\n"} {
+			if _, wErr := tempScriptFile.WriteString(s); wErr != nil {
+				return wErr
+			}
+		}
+
+		if err := m.CopyFileToPod(pod, tempScriptFile.Name(), hipconsts.WrappedScriptPath, opts.CopyAttempts); err != nil {
+			return err
 		}
 	}
 
 	since := time.Now()
-	if err := m.CopyFileToPod(pod, tempScriptFile.Name(), hipconsts.WrappedScriptPath, opts.CopyAttempts); err != nil {
-		return err
-	}
-
 	logz.Pod().Info().Msgf("Running '%v' command", color.YellowString(command))
 
 	b := &bytes.Buffer{}
