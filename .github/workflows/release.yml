@@ -63,17 +63,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: '1.26'
-          cache: true
-
       - name: Install Helm 4
-        run: |
-          curl -fsSL https://get.helm.sh/helm-v4.1.1-linux-amd64.tar.gz | tar -xz
-          sudo mv linux-amd64/helm /usr/local/bin/helm
-          helm version --short
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v4.1.4'
 
       - name: Set up ORAS
         uses: oras-project/setup-oras@v1
@@ -111,7 +104,10 @@ jobs:
             --artifact-type application/vnd.helm.plugin.v1+json \
             "$PACKAGE" \
             "$PACKAGE.prov"
-          oras tag "${REPO}:${VERSION}" latest
+          # Only tag stable releases as latest
+          if ! echo "$VERSION" | grep -qE '(alpha|beta|rc)'; then
+            oras tag "${REPO}:${VERSION}" latest
+          fi
 
       - name: Upload plugin tarball
         uses: actions/upload-artifact@v4
