@@ -52,9 +52,12 @@ When `helm` runs commands from your local machine, network latency to distant Ku
 
 ## 📋 Requirements
 
-- 🎯 **Helm 3 or Helm 4** installed on host machine
+- 🎯 **Helm 4** installed on host machine
 
-> 💡 The plugin detects Helm 4 at runtime and automatically adjusts repository sync behavior accordingly. No manual configuration is needed.
+> ⚠️ **Helm 3 users:** v0.8.0 is the last supported version. Install it with:
+> ```bash
+> helm plugin install --version v0.8.0 https://github.com/Noksa/helm-in-pod
+> ```
 
 ### 🖥️ Supported Platforms
 
@@ -71,19 +74,19 @@ When `helm` runs commands from your local machine, network latency to distant Ku
 <details>
 <summary>📥 <strong>Quick Install/Update</strong></summary>
 
-**For Helm 4:**
 ```bash
 # Install or update the plugin
-(helm plugin uninstall in-pod || true) && helm plugin install --verify=false --version=main https://github.com/Noksa/helm-in-pod
+(helm plugin uninstall in-pod || true) && helm plugin install oci://ghcr.io/Noksa/helm-in-pod/in-pod:0.9.0
 ```
 
-**For Helm 3:**
+> 💡 Replace `0.9.0` with any version from the [releases page](https://github.com/Noksa/helm-in-pod/releases)
+
+The plugin tarball is signed with PGP. Helm 4 verifies the signature automatically if you have the [public key](public-key.asc) imported into your GPG keyring:
+
 ```bash
-# Install or update the plugin
-(helm plugin uninstall in-pod || true) && helm plugin install --version=main https://github.com/Noksa/helm-in-pod
+curl -sSL https://raw.githubusercontent.com/Noksa/helm-in-pod/main/public-key.asc | gpg --import
+gpg --export > ~/.gnupg/pubring.gpg
 ```
-
-> 💡 You can specify any existing version from the releases page
 
 </details>
 

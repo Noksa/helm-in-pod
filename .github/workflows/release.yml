@@ -53,34 +53,107 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  plugin-package:
+    name: Package & Sign Plugin
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Helm 4
+        run: |
+          curl -fsSL https://get.helm.sh/helm-v4.1.1-linux-amd64.tar.gz | tar -xz
+          sudo mv linux-amd64/helm /usr/local/bin/helm
+          helm version --short
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@v1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package and sign plugin
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+
+          # Create clean plugin directory with only what's needed
+          mkdir -p plugin-staging/scripts
+          cp plugin.yaml plugin-staging/
+          cp scripts/install.sh plugin-staging/scripts/
+
+          # Set version from tag
+          sed -i "s/^version:.*/version: \"${VERSION}\"/" plugin-staging/plugin.yaml
+
+          base64 -d <<< "${{ secrets.GPG_KEYRING_BASE64 }}" > secring.gpg
+          helm plugin package --sign --key '${{ vars.SIGNING_KEY_EMAIL }}' --keyring secring.gpg plugin-staging
+          rm -f secring.gpg
+          ls -la in-pod-*.tgz in-pod-*.prov
+
+      - name: Push to OCI registry
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          PACKAGE="in-pod-${VERSION}.tgz"
+          REPO="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/helm-in-pod/in-pod"
+          oras push "${REPO}:${VERSION}" \
+            --artifact-type application/vnd.helm.plugin.v1+json \
+            "$PACKAGE" \
+            "$PACKAGE.prov"
+
+      - name: Upload plugin tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-package
+          path: |
+            in-pod-*.tgz
+            in-pod-*.tgz.prov
+          if-no-files-found: error
+          retention-days: 1
+
   release:
     name: Create Release
-    needs: build
+    needs: [build, plugin-package]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download all artifacts
+      - name: Download binary artifacts
         uses: actions/download-artifact@v4
         with:
           path: generated
           pattern: binary-*
           merge-multiple: true
 
+      - name: Download plugin package
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-package
+          path: generated
+
       - name: Verify archives
         run: |
-          count=$(ls generated/*.tar.gz 2>/dev/null | wc -l)
-          if [ "$count" -eq 0 ]; then
-            echo "No archives found in generated/"
-            exit 1
-          fi
-          echo "Found $count release archives:"
-          ls -lh generated/*.tar.gz
+          echo "Release archives:"
+          ls -lh generated/*.tar.gz generated/*.tgz generated/*.prov 2>/dev/null
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: generated/*.tar.gz
+          files: |
+            generated/*.tar.gz
+            generated/*.tgz
+            generated/*.prov
           prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') || contains(github.ref, 'rc') }}
           generate_release_notes: true
         env:
