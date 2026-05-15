@@ -3,6 +3,8 @@ package internal
 import (
 	"context"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -22,7 +24,13 @@ func RunCommand(cmd *cobra.Command) error {
 		logz.Host().Debug().Msg("Sets default timeout to 2h")
 		dur = time.Hour * 2
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), dur)
+	// Create a context that is canceled on SIGINT/SIGTERM so all downstream
+	// goroutines (file copy, repo update, command execution) stop immediately
+	// when the user presses Ctrl+C.
+	sigCtx, sigStop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer sigStop()
+
+	ctx, cancel := context.WithTimeout(sigCtx, dur)
 	defer cancel()
 	return cmd.ExecuteContext(ctx)
 }

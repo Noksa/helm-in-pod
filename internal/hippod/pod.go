@@ -161,39 +161,39 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 		}
 	}
 
-	// Handle interrupt signals. done is closed when CreateHelmPod returns so
-	// the goroutine exits promptly and does not leak across invocations.
-	done := make(chan struct{})
-	defer close(done)
-
+	// Handle interrupt signals. The goroutine persists for the lifetime of the
+	// process (not just this function) so that cleanup runs even if the signal
+	// arrives after CreateHelmPod returns (e.g. during file copy or repo update).
+	// The context passed to RunCommand is already canceled by signal.NotifyContext,
+	// which stops all in-flight goroutines. This handler only performs cleanup.
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(c)
 
 	go func() {
-		select {
-		case <-done:
-			return
-		case <-c:
+		<-c
+		logz.Host().Warn().Msg("Interrupted! Destroying helm pod")
+		// Mark interrupted first so polling loops bail out before they log,
+		// then suppress remaining loggers for goroutines racing to finish.
+		m.interrupted.Store(true)
+		logz.Suppress()
+
+		// m.ctx is already canceled by signal.NotifyContext, so use a fresh
+		// background context for cleanup API calls.
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		cleanupMgr := m.WithContext(cleanupCtx)
+		destroyErr := cleanupMgr.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
+		if destroyErr != nil {
+			logz.Host().Error().Msgf("Couldn't destroy helm pods: %v", destroyErr.Error())
 		}
-		if pod != nil && pod.Name != "" {
-			logz.Host().Warn().Msg("Interrupted! Destroying helm pod")
-			destroyErr := m.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
-			if destroyErr != nil {
-				logz.Host().Error().Msgf("Couldn't destroy helm pods: %v", destroyErr.Error())
-			}
-			// Clean up PDB if it was created
-			if opts.CreatePDB {
-				_ = m.DeletePodDisruptionBudgets(m.ctx, m.invocationID)
-			}
-			m.interrupted.Store(true)
+		if opts.CreatePDB {
+			_ = cleanupMgr.DeletePodDisruptionBudgets(cleanupCtx, m.invocationID)
 		}
-		select {
-		case <-done:
-			return
-		case <-c:
-			os.Exit(1)
-		}
+		cleanupCancel()
+
+		// A second signal force-exits. os.Exit skips defers, so cleanupCancel
+		// is called explicitly above instead of via defer.
+		<-c
+		os.Exit(1)
 	}()
 
 	logz.Host().Debug().Msgf("%v pod has been created", color.MagentaString(pod.Name))

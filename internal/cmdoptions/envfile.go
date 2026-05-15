@@ -3,6 +3,7 @@ package cmdoptions
 import (
 	"bufio"
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 )
@@ -25,15 +26,11 @@ func (o *ExecOptions) ParseEnvFiles() error {
 		if err != nil {
 			return err
 		}
-		for k, v := range vars {
-			merged[k] = v
-		}
+		maps.Copy(merged, vars)
 	}
 
 	// Overlay explicit flags on top
-	for k, v := range explicit {
-		merged[k] = v
-	}
+	maps.Copy(merged, explicit)
 	o.Env = merged
 	return nil
 }
@@ -44,7 +41,7 @@ func parseEnvFile(path string) (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open env file %q: %w", path, err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck // read-only file
 
 	result := make(map[string]string)
 	scanner := bufio.NewScanner(f)
