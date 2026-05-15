@@ -105,6 +105,7 @@ func addPodCreationFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions) {
 func addRuntimeFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions, copyRepoDefault bool) {
 	cmd.Flags().StringToStringVarP(&opts.Env, "env", "e", map[string]string{}, "Environment variables to set in the pod before running the command")
 	cmd.Flags().StringSliceVarP(&opts.SubstEnv, "subst-env", "s", []string{}, "Forward environment variables from the host to the pod by name (values are resolved from the host). Example: -s HELM_DRIVER,HELM_DRIVER_SQL_CONNECTION_STRING")
+	cmd.Flags().StringSliceVar(&opts.EnvFiles, "env-file", []string{}, "Read environment variables from a file (KEY=VALUE format, supports comments and quotes). Repeatable. Explicit --env flags take precedence")
 	cmd.Flags().BoolVar(&opts.CopyRepo, "copy-repo", copyRepoDefault, "Copy Helm repositories from the host to the pod")
 	cmd.Flags().StringSliceVar(&opts.UpdateRepo, "update-repo", []string{}, "Helm repository aliases to update in the pod after copying. Requires --copy-repo. If specified without values, all repositories are updated")
 	cmd.Flags().StringSliceVarP(&opts.Files, "copy", "c", []string{}, "Copy files/directories from host to pod. Format: /host/path:/pod/path. Repeatable")

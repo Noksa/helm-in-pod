@@ -85,6 +85,11 @@ func newDaemonExecCmd() *cobra.Command {
 				}
 			}
 
+			// Load environment variables from files
+			if err := opts.ParseEnvFiles(); err != nil {
+				return err
+			}
+
 			cmdToUse := strings.Join(args, " ")
 			timeout := viper.GetDuration("timeout")
 			if timeout == 0 {

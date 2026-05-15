@@ -58,6 +58,11 @@ Use 'daemon exec' to run commands and 'daemon stop' to tear down the pod.`,
 
 			opts.ParseFileMappings()
 
+			// Load environment variables from files
+			if err := opts.ParseEnvFiles(); err != nil {
+				return err
+			}
+
 			err = internal.Namespace().PrepareNs()
 			if err != nil {
 				return err

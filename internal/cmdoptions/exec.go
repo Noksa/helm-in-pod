@@ -41,6 +41,7 @@ type ExecOptions struct {
 	CopyFrom              []string
 	ActiveDeadlineSeconds int64
 	SuppressSecrets       bool
+	EnvFiles              []string
 }
 
 // ParseFileMappings parses the Files slice into FilesAsMap.
