@@ -41,6 +41,7 @@ func CompressMulti(entries []BundleEntry, buf io.Writer) error {
 // addToTar walks the source path and adds all files/directories to the tar writer
 // with the correct destination path inside the pod.
 func addToTar(tw *tar.Writer, src string, destPath string) error {
+	src = filepath.Clean(src)
 	stat, err := os.Stat(src)
 	if err != nil {
 		return err

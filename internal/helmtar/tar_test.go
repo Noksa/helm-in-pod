@@ -161,4 +161,72 @@ var _ = Describe("CompressMulti", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
+
+	Context("helm chart directory (simulates --copy chartDir:/tmp/chart)", func() {
+		It("should place Chart.yaml at destPath/Chart.yaml", func() {
+			// Simulate a helm chart directory structure
+			chartDir := filepath.Join(tmpDir, "my-chart")
+			templatesDir := filepath.Join(chartDir, "templates")
+			Expect(os.MkdirAll(templatesDir, 0755)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(chartDir, "Chart.yaml"), []byte("apiVersion: v2\nname: my-chart"), 0644)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(chartDir, "values.yaml"), []byte("key: value"), 0644)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(templatesDir, "deployment.yaml"), []byte("kind: Deployment"), 0644)).To(Succeed())
+
+			var buf bytes.Buffer
+			Expect(CompressMulti([]BundleEntry{{
+				SrcPath:  chartDir,
+				DestPath: "/tmp/chart",
+			}}, &buf)).To(Succeed())
+
+			files, err := extractTarGz(&buf)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Chart.yaml must be at /tmp/chart/Chart.yaml (not nested deeper)
+			Expect(files).To(HaveKeyWithValue("/tmp/chart/Chart.yaml", "apiVersion: v2\nname: my-chart"))
+			Expect(files).To(HaveKeyWithValue("/tmp/chart/values.yaml", "key: value"))
+			Expect(files).To(HaveKeyWithValue("/tmp/chart/templates/deployment.yaml", "kind: Deployment"))
+		})
+
+		It("should handle chart directory with trailing slash in source", func() {
+			chartDir := filepath.Join(tmpDir, "trailing-slash-chart")
+			Expect(os.MkdirAll(chartDir, 0755)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(chartDir, "Chart.yaml"), []byte("apiVersion: v2"), 0644)).To(Succeed())
+
+			var buf bytes.Buffer
+			Expect(CompressMulti([]BundleEntry{{
+				SrcPath:  chartDir + "/",
+				DestPath: "/tmp/chart",
+			}}, &buf)).To(Succeed())
+
+			files, err := extractTarGz(&buf)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(files).To(HaveKeyWithValue("/tmp/chart/Chart.yaml", "apiVersion: v2"))
+		})
+
+		It("should handle source path with .. components", func() {
+			// Simulate: /path/to/oracle-ansible/../../deployment/_installable/my-chart
+			baseDir := filepath.Join(tmpDir, "project", "examples", "oracle-ansible")
+			chartDir := filepath.Join(tmpDir, "project", "deployment", "_installable", "my-chart")
+			Expect(os.MkdirAll(baseDir, 0755)).To(Succeed())
+			Expect(os.MkdirAll(filepath.Join(chartDir, "templates"), 0755)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(chartDir, "Chart.yaml"), []byte("apiVersion: v2\nname: my-chart"), 0644)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(chartDir, "values.yaml"), []byte("key: value"), 0644)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(chartDir, "templates", "deploy.yaml"), []byte("kind: Deployment"), 0644)).To(Succeed())
+
+			// Use a raw path with ../.. (like ansible passes via shell, NOT filepath.Join which resolves ..)
+			srcWithDotDot := baseDir + "/../../deployment/_installable/my-chart"
+
+			var buf bytes.Buffer
+			Expect(CompressMulti([]BundleEntry{{
+				SrcPath:  srcWithDotDot,
+				DestPath: "/tmp/chart",
+			}}, &buf)).To(Succeed())
+
+			files, err := extractTarGz(&buf)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(files).To(HaveKeyWithValue("/tmp/chart/Chart.yaml", "apiVersion: v2\nname: my-chart"))
+			Expect(files).To(HaveKeyWithValue("/tmp/chart/values.yaml", "key: value"))
+			Expect(files).To(HaveKeyWithValue("/tmp/chart/templates/deploy.yaml", "kind: Deployment"))
+		})
+	})
 })
