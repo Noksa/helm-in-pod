@@ -111,6 +111,7 @@ func addRuntimeFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions, copyRepoD
 	cmd.Flags().IntVar(&opts.CopyAttempts, "copy-attempts", 3, "Retry count for file copy operations (default: 3)")
 	cmd.Flags().IntVar(&opts.UpdateRepoAttempts, "update-repo-attempts", 3, "Retry count for Helm repo update operations (default: 3)")
 	cmd.Flags().StringSliceVar(&opts.CopyFrom, "copy-from", []string{}, "Copy files/directories from pod to host after execution. Format: /pod/path:/host/path. Repeatable")
+	cmd.Flags().BoolVarP(&opts.SuppressSecrets, "suppress-secrets", "q", false, "Mask values of --set, --set-string, --set-file, --set-json flags in log output")
 }
 
 // parseCopyFromMappings parses --copy-from flag values into a map of pod_path -> host_path.

@@ -40,6 +40,7 @@ type ExecOptions struct {
 	DryRun                bool
 	CopyFrom              []string
 	ActiveDeadlineSeconds int64
+	SuppressSecrets       bool
 }
 
 // ParseFileMappings parses the Files slice into FilesAsMap.
