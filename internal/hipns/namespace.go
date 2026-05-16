@@ -9,10 +9,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/logz"
 )
-
-const Name = "helm-in-pod"
 
 type Manager struct {
 	ctx context.Context
@@ -32,27 +31,27 @@ func (m *Manager) WithContext(ctx context.Context) *Manager {
 
 func (m *Manager) PrepareNs() error {
 	cs := operatorkclient.DefaultClient().ClientSet()
-	ns, err := cs.CoreV1().Namespaces().Get(m.ctx, Name, metav1.GetOptions{})
+	ns, err := cs.CoreV1().Namespaces().Get(m.ctx, hipconsts.Namespace, metav1.GetOptions{})
 	if client.IgnoreNotFound(err) != nil {
 		return err
 	}
 	if ns == nil || ns.Name == "" {
-		logz.Host().Debug().Msgf("Creating '%v' ns", Name)
+		logz.Host().Debug().Msgf("Creating '%v' ns", hipconsts.Namespace)
 		_, err = cs.CoreV1().Namespaces().Create(m.ctx, &v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: Name},
+			ObjectMeta: metav1.ObjectMeta{Name: hipconsts.Namespace},
 		}, metav1.CreateOptions{})
 		if err != nil && client.IgnoreAlreadyExists(err) != nil {
 			return err
 		}
 	}
-	sa, err := cs.CoreV1().ServiceAccounts(Name).Get(m.ctx, Name, metav1.GetOptions{})
+	sa, err := cs.CoreV1().ServiceAccounts(hipconsts.Namespace).Get(m.ctx, hipconsts.Namespace, metav1.GetOptions{})
 	if client.IgnoreNotFound(err) != nil {
 		return err
 	}
 	if sa == nil || sa.Name == "" {
-		logz.Host().Debug().Msgf("Creating '%v' serviceaccount in '%v' ns", Name, Name)
-		_, err = cs.CoreV1().ServiceAccounts(Name).Create(m.ctx, &v1.ServiceAccount{
-			ObjectMeta: metav1.ObjectMeta{Name: Name},
+		logz.Host().Debug().Msgf("Creating '%v' serviceaccount in '%v' ns", hipconsts.Namespace, hipconsts.Namespace)
+		_, err = cs.CoreV1().ServiceAccounts(hipconsts.Namespace).Create(m.ctx, &v1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: hipconsts.Namespace},
 		}, metav1.CreateOptions{})
 		if err != nil && client.IgnoreAlreadyExists(err) != nil {
 			return err
@@ -63,15 +62,15 @@ func (m *Manager) PrepareNs() error {
 
 func (m *Manager) CreateClusterRoleBinding() error {
 	cs := operatorkclient.DefaultClient().ClientSet()
-	crb, err := cs.RbacV1().ClusterRoleBindings().Get(m.ctx, Name, metav1.GetOptions{})
+	crb, err := cs.RbacV1().ClusterRoleBindings().Get(m.ctx, hipconsts.Namespace, metav1.GetOptions{})
 	if client.IgnoreNotFound(err) != nil {
 		return err
 	}
 	if crb == nil || crb.Name == "" {
-		logz.Host().Debug().Msgf("Creating '%v' clusterrolebinding in '%v' ns", Name, Name)
+		logz.Host().Debug().Msgf("Creating '%v' clusterrolebinding in '%v' ns", hipconsts.Namespace, hipconsts.Namespace)
 		_, err = cs.RbacV1().ClusterRoleBindings().Create(m.ctx, &rbacv1.ClusterRoleBinding{
-			ObjectMeta: metav1.ObjectMeta{Name: Name},
-			Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: Name, Namespace: Name}},
+			ObjectMeta: metav1.ObjectMeta{Name: hipconsts.Namespace},
+			Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: hipconsts.Namespace, Namespace: hipconsts.Namespace}},
 			RoleRef: rbacv1.RoleRef{
 				APIGroup: "rbac.authorization.k8s.io",
 				Kind:     "ClusterRole",
@@ -87,13 +86,13 @@ func (m *Manager) CreateClusterRoleBinding() error {
 
 func (m *Manager) DeleteClusterRoleBinding() error {
 	cs := operatorkclient.DefaultClient().ClientSet()
-	crb, err := cs.RbacV1().ClusterRoleBindings().Get(m.ctx, Name, metav1.GetOptions{})
+	crb, err := cs.RbacV1().ClusterRoleBindings().Get(m.ctx, hipconsts.Namespace, metav1.GetOptions{})
 	if client.IgnoreNotFound(err) != nil {
 		return err
 	}
 	if crb != nil && crb.Name != "" {
-		logz.Host().Debug().Msgf("Removing '%v' clusterrolebinding in '%v' ns", Name, Name)
-		err = cs.RbacV1().ClusterRoleBindings().Delete(m.ctx, Name, metav1.DeleteOptions{})
+		logz.Host().Debug().Msgf("Removing '%v' clusterrolebinding in '%v' ns", hipconsts.Namespace, hipconsts.Namespace)
+		err = cs.RbacV1().ClusterRoleBindings().Delete(m.ctx, hipconsts.Namespace, metav1.DeleteOptions{})
 		return err
 	}
 	return nil

@@ -61,7 +61,7 @@ func logOnFailure(ns string) {
 	if !CurrentSpecReport().Failed() {
 		return
 	}
-	for _, namespace := range []string{ns, hipconsts.HelmInPodNamespace} {
+	for _, namespace := range []string{ns, hipconsts.Namespace} {
 		if namespace == "" {
 			continue
 		}

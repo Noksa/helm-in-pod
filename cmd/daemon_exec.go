@@ -106,14 +106,22 @@ func newDaemonExecCmd() *cobra.Command {
 					}
 					return parseErr
 				}
+				var copyErrors []error
 				for podPath, hostPath := range copyFromMap {
 					expanded, expandErr := expand(hostPath)
 					if expandErr != nil {
-						return expandErr
+						copyErrors = append(copyErrors, expandErr)
+						continue
 					}
 					if copyErr := internal.Pod().CopyFileFromPod(pod, podPath, expanded, opts.CopyAttempts); copyErr != nil {
-						return copyErr
+						copyErrors = append(copyErrors, copyErr)
 					}
+				}
+				if len(copyErrors) > 0 {
+					if execErr != nil {
+						return execErr
+					}
+					return copyErrors[0]
 				}
 			}
 

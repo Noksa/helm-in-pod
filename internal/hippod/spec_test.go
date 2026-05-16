@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
 
 var _ = Describe("buildPodSpec", func() {
@@ -312,6 +313,41 @@ var _ = Describe("buildPodSpec", func() {
 			Expect(sc.RunAsUser).NotTo(BeNil())
 			Expect(*sc.RunAsUser).To(Equal(int64(0)))
 		})
+
+		It("should set Privileged when --privileged is true", func() {
+			opts := baseOpts()
+			opts.Privileged = true
+			spec, err := buildPodSpec(opts, false)
+			Expect(err).NotTo(HaveOccurred())
+
+			sc := spec.Containers[0].SecurityContext
+			Expect(sc.Privileged).NotTo(BeNil())
+			Expect(*sc.Privileged).To(BeTrue())
+		})
+
+		It("should not set Privileged when --privileged is false (default)", func() {
+			opts := baseOpts()
+			// Privileged is false by default — the field should be nil, not *false
+			spec, err := buildPodSpec(opts, false)
+			Expect(err).NotTo(HaveOccurred())
+
+			sc := spec.Containers[0].SecurityContext
+			Expect(sc.Privileged).To(BeNil())
+		})
+
+		It("should combine Privileged with RunAsUser", func() {
+			opts := baseOpts()
+			opts.Privileged = true
+			opts.RunAsUser = 0
+			spec, err := buildPodSpec(opts, false)
+			Expect(err).NotTo(HaveOccurred())
+
+			sc := spec.Containers[0].SecurityContext
+			Expect(sc.Privileged).NotTo(BeNil())
+			Expect(*sc.Privileged).To(BeTrue())
+			Expect(sc.RunAsUser).NotTo(BeNil())
+			Expect(*sc.RunAsUser).To(Equal(int64(0)))
+		})
 	})
 
 	Context("image configuration", func() {
@@ -322,6 +358,14 @@ var _ = Describe("buildPodSpec", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(spec.Containers[0].Image).To(Equal("custom-image:v1.0"))
+		})
+
+		It("should always name the container 'helm-in-pod' regardless of namespace", func() {
+			opts := baseOpts()
+			spec, err := buildPodSpec(opts, false)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(spec.Containers[0].Name).To(Equal("helm-in-pod"))
 		})
 
 		It("should set the pull policy", func() {
@@ -516,13 +560,13 @@ var _ = Describe("buildPodSpec", func() {
 			Expect(spec.ServiceAccountName).To(Equal("my-custom-sa"))
 		})
 
-		It("should default to Namespace when service account is empty", func() {
+		It("should default to hipconsts.Namespace when service account is empty", func() {
 			opts := baseOpts()
 			opts.ServiceAccount = ""
 			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(spec.ServiceAccountName).To(Equal(Namespace))
+			Expect(spec.ServiceAccountName).To(Equal(hipconsts.Namespace))
 		})
 	})
 
@@ -538,7 +582,7 @@ var _ = Describe("buildPodSpec", func() {
 			Expect(tsc.TopologyKey).To(Equal("kubernetes.io/hostname"))
 			Expect(tsc.WhenUnsatisfiable).To(Equal(corev1.ScheduleAnyway))
 			Expect(tsc.LabelSelector).NotTo(BeNil())
-			Expect(tsc.LabelSelector.MatchLabels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", Namespace))
+			Expect(tsc.LabelSelector.MatchLabels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", hipconsts.Namespace))
 		})
 	})
 
@@ -585,7 +629,7 @@ var _ = Describe("buildPodSpec", func() {
 			spec, err := buildPodSpec(opts, false)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(spec.ServiceAccountName).To(Equal(Namespace))
+			Expect(spec.ServiceAccountName).To(Equal(hipconsts.Namespace))
 		})
 
 		It("should enable automount service account token", func() {

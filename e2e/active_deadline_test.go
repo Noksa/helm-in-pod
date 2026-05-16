@@ -126,7 +126,7 @@ var _ = Describe("Active Deadline Seconds Flag", func() {
 			parts := strings.SplitN(testLabel, "=", 2)
 			Expect(parts).To(HaveLen(2))
 			cmd = exec.Command("kubectl", "get", "pods",
-				"-n", hipconsts.HelmInPodNamespace,
+				"-n", hipconsts.Namespace,
 				"-l", fmt.Sprintf("%s=%s", parts[0], parts[1]),
 				"-o", "name")
 			podOutput, _ := Run(cmd)
@@ -150,7 +150,7 @@ var _ = Describe("Active Deadline Seconds Flag", func() {
 					return ""
 				}
 				cmd := exec.Command("kubectl", "get", "pods",
-					"-n", hipconsts.HelmInPodNamespace,
+					"-n", hipconsts.Namespace,
 					"-l", fmt.Sprintf("%s=%s", parts[0], parts[1]),
 					"-o", "jsonpath={range .items[*]}{.spec.activeDeadlineSeconds}{end}")
 				out, _ := RunWithExitCode(cmd)
@@ -407,11 +407,11 @@ var _ = Describe("Active Deadline Seconds Flag", func() {
 			// Daemon pods always live in the helm-in-pod namespace, named "daemon-<name>"
 			podName := fmt.Sprintf("daemon-%s", daemonName)
 			cmd = exec.Command("kubectl", "get", "pod", podName,
-				"-n", hipconsts.HelmInPodNamespace,
+				"-n", hipconsts.Namespace,
 				"-o", "jsonpath={.spec.activeDeadlineSeconds}")
 			podOutput, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred(),
-				"failed to query daemon pod %s in ns %s", podName, hipconsts.HelmInPodNamespace)
+				"failed to query daemon pod %s in ns %s", podName, hipconsts.Namespace)
 			Expect(strings.TrimSpace(podOutput)).To(Equal("600"),
 				"daemon pod must have activeDeadlineSeconds=600 in its live spec")
 		})
@@ -450,11 +450,11 @@ var _ = Describe("Active Deadline Seconds Flag", func() {
 			// Field absent → empty string returned, kubectl exits 0 for a specific pod
 			podName := fmt.Sprintf("daemon-%s", daemonName)
 			cmd = exec.Command("kubectl", "get", "pod", podName,
-				"-n", hipconsts.HelmInPodNamespace,
+				"-n", hipconsts.Namespace,
 				"-o", "jsonpath={.spec.activeDeadlineSeconds}")
 			podOutput, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred(),
-				"failed to query daemon pod %s in ns %s", podName, hipconsts.HelmInPodNamespace)
+				"failed to query daemon pod %s in ns %s", podName, hipconsts.Namespace)
 			Expect(strings.TrimSpace(podOutput)).To(BeEmpty(),
 				"daemon pod must NOT have activeDeadlineSeconds when flag is not set")
 		})

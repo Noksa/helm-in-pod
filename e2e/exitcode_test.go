@@ -119,14 +119,14 @@ exit 5
 
 			// Extract pod name from output
 			expectedPodName := fmt.Sprintf("daemon-%s", daemonName)
-			cmd = exec.Command("kubectl", "get", "pod", expectedPodName, "-n", hipconsts.HelmInPodNamespace, "-o", "jsonpath={.metadata.name}")
+			cmd = exec.Command("kubectl", "get", "pod", expectedPodName, "-n", hipconsts.Namespace, "-o", "jsonpath={.metadata.name}")
 			daemonPodName, err = Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(daemonPodName).NotTo(BeEmpty(), "Daemon pod not found")
 
 			By(fmt.Sprintf("waiting for daemon pod %s to be ready", daemonPodName))
 			Eventually(func() string {
-				cmd := exec.Command("kubectl", "get", "pod", daemonPodName, "-n", hipconsts.HelmInPodNamespace, "-o", "jsonpath={.status.phase}")
+				cmd := exec.Command("kubectl", "get", "pod", daemonPodName, "-n", hipconsts.Namespace, "-o", "jsonpath={.status.phase}")
 				phase, _ := Run(cmd)
 				return phase
 			}).WithTimeout(60 * time.Second).Should(Equal("Running"))

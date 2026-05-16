@@ -65,6 +65,11 @@ The pod is deleted after the command completes, even on failure.`,
 			if errors.Is(cmd.Context().Err(), context.Canceled) {
 				return
 			}
+			// --keep-pod: leave the pod alive so the user can inspect it.
+			// The pod is removed on the next exec or purge run.
+			if opts.KeepPod {
+				return
+			}
 			pod := internal.Pod()
 			if cmd.Context().Err() != nil {
 				cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -95,11 +100,14 @@ The pod is deleted after the command completes, even on failure.`,
 		if err != nil {
 			return err
 		}
+		if opts.KeepPod {
+			logz.Host().Info().Msgf("Pod %v will be kept after exec — inspect with: kubectl exec -n %v %v -- sh", pod.Name, pod.Namespace, pod.Name)
+		}
 
 		cmdToUse := strings.Join(args, " ")
 
 		// Generate the wrapped script
-		tempScriptFile, err := os.CreateTemp("", hipconsts.HelmInPodNamespace)
+		tempScriptFile, err := os.CreateTemp("", hipconsts.Namespace)
 		if err != nil {
 			return err
 		}

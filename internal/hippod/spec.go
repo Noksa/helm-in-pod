@@ -160,6 +160,9 @@ func buildPodSpec(opts cmdoptions.ExecOptions, daemon bool) (corev1.PodSpec, err
 	if opts.RunAsGroup > -1 {
 		securityContext.RunAsGroup = gopointer.NewOf(opts.RunAsGroup)
 	}
+	if opts.Privileged {
+		securityContext.Privileged = gopointer.NewOf(true)
+	}
 
 	// Parse volumes
 	var volumes []corev1.Volume
@@ -173,14 +176,14 @@ func buildPodSpec(opts cmdoptions.ExecOptions, daemon bool) (corev1.PodSpec, err
 		volumeMounts = append(volumeMounts, mount)
 	}
 
-	serviceAccountName := Namespace
+	serviceAccountName := hipconsts.Namespace
 	if opts.ServiceAccount != "" {
 		serviceAccountName = opts.ServiceAccount
 	}
 
 	podSpec := corev1.PodSpec{
 		Containers: []corev1.Container{{
-			Name:            Namespace,
+			Name:            "helm-in-pod",
 			ImagePullPolicy: corev1.PullPolicy(opts.PullPolicy),
 			Image:           opts.Image,
 			Command:         []string{"sh", "-cue"},
@@ -254,7 +257,7 @@ func buildPodSpec(opts cmdoptions.ExecOptions, daemon bool) (corev1.PodSpec, err
 			WhenUnsatisfiable: corev1.ScheduleAnyway,
 			LabelSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					hipconsts.LabelManagedBy: Namespace,
+					hipconsts.LabelManagedBy: hipconsts.Namespace,
 				},
 			},
 		},

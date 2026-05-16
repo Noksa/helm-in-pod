@@ -37,8 +37,6 @@ import (
 	"github.com/noksa/helm-in-pod/internal/logz"
 )
 
-const Namespace = "helm-in-pod"
-
 type Manager struct {
 	ctx          context.Context
 	myHostname   string
@@ -71,19 +69,8 @@ func (m *Manager) client() *operatorkclient.Client {
 	return operatorkclient.DefaultClient()
 }
 
-func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOptions cmdoptions.PurgeOptions) error {
-	opts := metav1.ListOptions{}
-	if !purgeOptions.All {
-		// Include the per-process operation ID so each process only deletes its own pods.
-		// Without this, concurrent instances on the same host would share the
-		// "host=<hostname>" selector and delete each other's pods on startup.
-		selector := fmt.Sprintf("host=%v,%v=%v", m.myHostname, hipconsts.LabelOperationID, m.invocationID)
-		for k, v := range execOptions.Labels {
-			selector = fmt.Sprintf("%v,%v=%v", selector, k, v)
-		}
-		opts.LabelSelector = selector
-	}
-	pods, err := m.client().ClientSet().CoreV1().Pods(Namespace).List(m.ctx, opts)
+func (m *Manager) deletePodsMatchingSelector(selector string) error {
+	pods, err := m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).List(m.ctx, metav1.ListOptions{LabelSelector: selector})
 	if err != nil {
 		return err
 	}
@@ -91,7 +78,6 @@ func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOption
 		pod := &pods.Items[i]
 		logz.Host().Debug().Msgf("Deleting '%v' pod", pod.Name)
 
-		// Extract operation ID from pod labels and delete associated PDB
 		if operationID, ok := pod.Labels[hipconsts.LabelOperationID]; ok {
 			if err := m.DeletePodDisruptionBudgets(m.ctx, operationID); err != nil {
 				logz.Host().Warn().Msgf("Failed to delete PodDisruptionBudget for operation %s: %v", operationID, err)
@@ -107,8 +93,7 @@ func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOption
 			deleteOpts.GracePeriodSeconds = &zero
 		}
 
-		err = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, deleteOpts)
-		if err != nil {
+		if err := m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).Delete(m.ctx, pod.Name, deleteOpts); err != nil {
 			return err
 		}
 		logz.Host().Debug().Msgf("'%v' pod has been deleted", pod.Name)
@@ -116,12 +101,46 @@ func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOption
 	return nil
 }
 
+func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOptions cmdoptions.PurgeOptions) error {
+	if purgeOptions.All {
+		pods, err := m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).List(m.ctx, metav1.ListOptions{})
+		if err != nil {
+			return err
+		}
+		for i := range pods.Items {
+			pod := &pods.Items[i]
+			logz.Host().Debug().Msgf("Deleting '%v' pod", pod.Name)
+			if err := m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Include the per-process operation ID so each process only deletes its own pods.
+	// Without this, concurrent instances on the same host would share the
+	// "host=<hostname>" selector and delete each other's pods on startup.
+	selector := fmt.Sprintf("host=%v,%v=%v", m.myHostname, hipconsts.LabelOperationID, m.invocationID)
+	for k, v := range execOptions.Labels {
+		selector = fmt.Sprintf("%v,%v=%v", selector, k, v)
+	}
+	if err := m.deletePodsMatchingSelector(selector); err != nil {
+		return err
+	}
+
+	// Also clean up kept pods from previous runs on this host so they don't accumulate.
+	// Kept pods are labeled helm-in-pod/kept=true and are safe to remove once the user
+	// starts a new exec (they've had time to inspect the pod between runs).
+	keptSelector := fmt.Sprintf("host=%v,%v=true", m.myHostname, hipconsts.LabelKept)
+	return m.deletePodsMatchingSelector(keptSelector)
+}
+
 func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error) {
 	err := m.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
 	if err != nil {
 		return nil, err
 	}
-	logz.Host().Info().Msgf("Creating '%v' pod", color.MagentaString(Namespace))
+	logz.Host().Info().Msgf("Creating '%v' pod", color.MagentaString(hipconsts.Namespace))
 
 	podSpec, err := buildPodSpec(opts, false)
 	if err != nil {
@@ -131,15 +150,18 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	labels := map[string]string{
 		"host":                     m.myHostname,
 		hipconsts.LabelOperationID: m.invocationID,
-		hipconsts.LabelManagedBy:   Namespace,
+		hipconsts.LabelManagedBy:   hipconsts.Namespace,
+	}
+	if opts.KeepPod {
+		labels[hipconsts.LabelKept] = "true"
 	}
 	maps.Copy(labels, opts.Labels)
 	annotations := map[string]string{}
 	maps.Copy(annotations, opts.Annotations)
 
-	pod, err := m.client().ClientSet().CoreV1().Pods(Namespace).Create(m.ctx, &corev1.Pod{
+	pod, err := m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).Create(m.ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: fmt.Sprintf("%v-", Namespace),
+			GenerateName: fmt.Sprintf("%v-", hipconsts.Namespace),
 			Labels:       labels,
 			Annotations:  annotations,
 		},
@@ -154,7 +176,7 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 		if err := m.CreatePodDisruptionBudget(m.ctx, m.invocationID); err != nil {
 			// If PDB creation fails, clean up the pod immediately
 			zero := int64(0)
-			_ = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{
+			_ = m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{
 				GracePeriodSeconds: &zero,
 			})
 			return nil, fmt.Errorf("failed to create PodDisruptionBudget: %w", err)
@@ -197,7 +219,7 @@ func (m *Manager) CreateHelmPod(opts cmdoptions.ExecOptions) (*corev1.Pod, error
 	}()
 
 	logz.Host().Debug().Msgf("%v pod has been created", color.MagentaString(pod.Name))
-	return pod, m.waitUntilPodIsRunning(pod)
+	return pod, m.waitUntilPodIsRunning(pod, opts.StartupTimeout)
 }
 
 // isPodReady reports whether at least one of the pod's containers is marked
@@ -217,10 +239,13 @@ func isPodReady(pod *corev1.Pod) bool {
 	return false
 }
 
-func (m *Manager) waitUntilPodIsRunning(pod *corev1.Pod) error {
+func (m *Manager) waitUntilPodIsRunning(pod *corev1.Pod, timeout time.Duration) error {
+	if timeout <= 0 {
+		timeout = 5 * time.Minute
+	}
 	logz.Host().Info().Msgf("Waiting until %v pod is ready", color.MagentaString(pod.Name))
 
-	err := wait.PollUntilContextTimeout(m.ctx, time.Second, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
+	err := wait.PollUntilContextTimeout(m.ctx, time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		if m.interrupted.Load() {
 			return false, fmt.Errorf("interrupted while was waiting for pod readiness")
 		}
@@ -256,7 +281,7 @@ func (m *Manager) waitUntilPodIsDeleted(podName string) error {
 			return false, fmt.Errorf("interrupted while waiting for pod deletion")
 		}
 
-		_, getErr := m.client().ClientSet().CoreV1().Pods(Namespace).Get(ctx, podName, metav1.GetOptions{})
+		_, getErr := m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).Get(ctx, podName, metav1.GetOptions{})
 		if getErr != nil {
 			if k8serrors.IsNotFound(getErr) {
 				logz.Host().Info().Msgf("Pod %v has been deleted", color.CyanString(podName))
@@ -315,7 +340,7 @@ func (m *Manager) CopyFilesBundleWithBootInfo(pod *corev1.Pod, entries []helmtar
 		logz.HostPod().Info().Msg("Copying files bundle and collecting pod boot info")
 
 		var stdout bytes.Buffer
-		_, stderr, execErr := m.client().ExecInPod(cmd, Namespace, pod.Name, pod.Namespace,
+		_, stderr, execErr := m.client().ExecInPod(cmd, hipconsts.Namespace, pod.Name, pod.Namespace,
 			operatorkclient.WithContext(m.ctx),
 			operatorkclient.WithTimeout(time.Minute*10),
 			operatorkclient.WithStdin(bytes.NewReader(tarBytes)),
@@ -381,7 +406,7 @@ func (m *Manager) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string
 	return hipretry.RetryWithContext(m.ctx, attempts, func() error {
 		logz.HostPod().Info().Msgf("Copying %v to %v", color.CyanString(srcPath), color.MagentaString(destPath))
 
-		_, stderr, err := m.client().ExecInPod(cmd, Namespace, pod.Name, pod.Namespace,
+		_, stderr, err := m.client().ExecInPod(cmd, hipconsts.Namespace, pod.Name, pod.Namespace,
 			operatorkclient.WithContext(m.ctx),
 			operatorkclient.WithTimeout(time.Minute*10),
 			operatorkclient.WithStdin(bytes.NewReader(buffer.Bytes())),
@@ -398,7 +423,7 @@ func (m *Manager) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string
 // isPodPathRegularFile checks whether podPath is a regular file inside the pod.
 func (m *Manager) isPodPathRegularFile(pod *corev1.Pod, podPath string) bool {
 	cmd := fmt.Sprintf("test -f %s", podPath)
-	_, _, err := m.client().ExecInPod(cmd, Namespace, pod.Name, pod.Namespace,
+	_, _, err := m.client().ExecInPod(cmd, hipconsts.Namespace, pod.Name, pod.Namespace,
 		operatorkclient.WithRawCommand(true))
 	return err == nil
 }
@@ -441,7 +466,7 @@ func (m *Manager) CopyFileFromPod(pod *corev1.Pod, podPath string, hostPath stri
 		logz.HostPod().Info().Msgf("Copying %v to %v", color.MagentaString(podPath), color.CyanString(hostPath))
 
 		var stdout bytes.Buffer
-		_, _, err := m.client().ExecInPod(tarCmd, Namespace, pod.Name, pod.Namespace,
+		_, _, err := m.client().ExecInPod(tarCmd, hipconsts.Namespace, pod.Name, pod.Namespace,
 			operatorkclient.WithContext(m.ctx),
 			operatorkclient.WithTimeout(time.Minute*10),
 			operatorkclient.WithRawCommand(true),
@@ -581,13 +606,13 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 	labels := map[string]string{
 		"daemon":                   opts.Name,
 		hipconsts.LabelOperationID: m.invocationID,
-		hipconsts.LabelManagedBy:   Namespace,
+		hipconsts.LabelManagedBy:   hipconsts.Namespace,
 	}
 	maps.Copy(labels, opts.Labels)
 	annotations := map[string]string{}
 	maps.Copy(annotations, opts.Annotations)
 
-	pod, err := m.client().ClientSet().CoreV1().Pods(Namespace).Create(m.ctx, &corev1.Pod{
+	pod, err := m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).Create(m.ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        fmt.Sprintf("daemon-%s", opts.Name),
 			Labels:      labels,
@@ -604,7 +629,7 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 		if err := m.CreatePodDisruptionBudget(m.ctx, m.invocationID); err != nil {
 			// If PDB creation fails, clean up the pod immediately
 			zero := int64(0)
-			_ = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{
+			_ = m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{
 				GracePeriodSeconds: &zero,
 			})
 			return nil, fmt.Errorf("failed to create PodDisruptionBudget: %w", err)
@@ -612,12 +637,12 @@ func (m *Manager) CreateDaemonPod(opts cmdoptions.DaemonOptions) (*corev1.Pod, e
 	}
 
 	logz.Host().Debug().Msgf("Daemon pod %v has been created", pod.Name)
-	return pod, m.waitUntilPodIsRunning(pod)
+	return pod, m.waitUntilPodIsRunning(pod, opts.StartupTimeout)
 }
 
 func (m *Manager) GetDaemonPod(name string) (*corev1.Pod, error) {
 	podName := fmt.Sprintf("daemon-%s", name)
-	pod, err := m.client().ClientSet().CoreV1().Pods(Namespace).Get(m.ctx, podName, metav1.GetOptions{})
+	pod, err := m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).Get(m.ctx, podName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("daemon pod '%s' not found: %w", name, err)
 	}
@@ -629,7 +654,7 @@ func (m *Manager) DeleteDaemonPod(name string) error {
 	logz.Host().Info().Msgf("Deleting daemon pod %v", color.CyanString(podName))
 
 	// Get the pod to extract operation ID before deletion
-	pod, err := m.client().ClientSet().CoreV1().Pods(Namespace).Get(m.ctx, podName, metav1.GetOptions{})
+	pod, err := m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).Get(m.ctx, podName, metav1.GetOptions{})
 	if err == nil {
 		// Extract operation ID from pod labels and delete associated PDB
 		if operationID, ok := pod.Labels[hipconsts.LabelOperationID]; ok {
@@ -639,7 +664,7 @@ func (m *Manager) DeleteDaemonPod(name string) error {
 		}
 	}
 
-	err = m.client().ClientSet().CoreV1().Pods(Namespace).Delete(m.ctx, podName, metav1.DeleteOptions{})
+	err = m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).Delete(m.ctx, podName, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
@@ -681,7 +706,7 @@ func (m *Manager) OpenInteractiveShell(ctx context.Context, pod *corev1.Pod, she
 		_ = restoreTerminal(oldState)
 	}()
 
-	_, _, err = m.client().ExecInPod(shell, Namespace, pod.Name, pod.Namespace,
+	_, _, err = m.client().ExecInPod(shell, hipconsts.Namespace, pod.Name, pod.Namespace,
 		operatorkclient.WithContext(ctx),
 		operatorkclient.WithTTY(true),
 		operatorkclient.WithRawCommand(true),
@@ -711,11 +736,11 @@ func (m *Manager) PrintPodSpecYAML(opts cmdoptions.ExecOptions, isDaemon bool) e
 			Kind:       "Pod",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: fmt.Sprintf("%v-", Namespace),
-			Namespace:    Namespace,
+			GenerateName: fmt.Sprintf("%v-", hipconsts.Namespace),
+			Namespace:    hipconsts.Namespace,
 			Labels: map[string]string{
 				"host":                   m.myHostname,
-				hipconsts.LabelManagedBy: Namespace,
+				hipconsts.LabelManagedBy: hipconsts.Namespace,
 			},
 			Annotations: maps.Clone(opts.Annotations),
 		},
@@ -752,7 +777,7 @@ type DaemonInfo struct {
 
 // ListDaemonPods returns information about all daemon pods in the namespace.
 func (m *Manager) ListDaemonPods() ([]DaemonInfo, error) {
-	pods, err := m.client().ClientSet().CoreV1().Pods(Namespace).List(m.ctx, metav1.ListOptions{
+	pods, err := m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).List(m.ctx, metav1.ListOptions{
 		LabelSelector: "daemon",
 	})
 	if err != nil {

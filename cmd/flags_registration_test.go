@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"os"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/cobra"
 
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
 
 var _ = Describe("Flag Registration", func() {
@@ -30,6 +33,7 @@ var _ = Describe("Flag Registration", func() {
 				"host-network", "tolerations", "node-selector",
 				"image-pull-secret", "pull-policy", "image",
 				"volume", "service-account", "dry-run",
+				"active-deadline-seconds", "privileged", "startup-timeout", "keep-pod",
 			}
 			for _, name := range flags {
 				Expect(execCmd.Flags().Lookup(name)).NotTo(BeNil(), "flag --%s should be registered", name)
@@ -40,7 +44,7 @@ var _ = Describe("Flag Registration", func() {
 			flags := []string{
 				"env", "subst-env", "copy-repo", "update-repo",
 				"copy", "copy-attempts", "update-repo-attempts",
-				"copy-from",
+				"copy-from", "suppress-secrets", "env-file",
 			}
 			for _, name := range flags {
 				Expect(execCmd.Flags().Lookup(name)).NotTo(BeNil(), "flag --%s should be registered", name)
@@ -108,6 +112,64 @@ var _ = Describe("Flag Registration", func() {
 		It("should have shorthand -i for --image", func() {
 			f := execCmd.Flags().Lookup("image")
 			Expect(f.Shorthand).To(Equal("i"))
+		})
+
+		It("should have false default for --privileged", func() {
+			Expect(opts.Privileged).To(BeFalse())
+		})
+
+		It("should parse --privileged as bool", func() {
+			Expect(execCmd.Flags().Set("privileged", "true")).To(Succeed())
+			Expect(opts.Privileged).To(BeTrue())
+		})
+
+		It("should have zero default for --startup-timeout (uses internal 5m fallback)", func() {
+			Expect(opts.StartupTimeout).To(BeZero())
+		})
+
+		It("should parse --startup-timeout as duration", func() {
+			Expect(execCmd.Flags().Set("startup-timeout", "10m")).To(Succeed())
+			Expect(opts.StartupTimeout.Minutes()).To(BeNumerically("==", 10))
+		})
+
+		It("should have false default for --keep-pod", func() {
+			Expect(opts.KeepPod).To(BeFalse())
+		})
+
+		It("should parse --keep-pod as bool", func() {
+			Expect(execCmd.Flags().Set("keep-pod", "true")).To(Succeed())
+			Expect(opts.KeepPod).To(BeTrue())
+		})
+	})
+
+	Context("HELM_IN_POD_IMAGE env var", func() {
+		AfterEach(func() {
+			_ = os.Unsetenv(hipconsts.EnvImage)
+		})
+
+		It("defaults --image to built-in image when env var is not set", func() {
+			_ = os.Unsetenv(hipconsts.EnvImage)
+			o := &cmdoptions.ExecOptions{}
+			c := &cobra.Command{}
+			addPodCreationFlags(c, o)
+			Expect(o.Image).To(ContainSubstring("kubectl-helm"))
+		})
+
+		It("defaults --image to HELM_IN_POD_IMAGE when env var is set", func() {
+			_ = os.Setenv(hipconsts.EnvImage, "my-registry/custom-tools:v9.0")
+			o := &cmdoptions.ExecOptions{}
+			c := &cobra.Command{}
+			addPodCreationFlags(c, o)
+			Expect(o.Image).To(Equal("my-registry/custom-tools:v9.0"))
+		})
+
+		It("shows the env var name in the flag description", func() {
+			_ = os.Unsetenv(hipconsts.EnvImage)
+			o := &cmdoptions.ExecOptions{}
+			c := &cobra.Command{}
+			addPodCreationFlags(c, o)
+			f := c.Flags().Lookup("image")
+			Expect(f.Usage).To(ContainSubstring(hipconsts.EnvImage))
 		})
 	})
 
@@ -277,7 +339,7 @@ var _ = Describe("Flag Registration", func() {
 				"host-network", "tolerations", "node-selector",
 				"image-pull-secret", "pull-policy", "image",
 				"volume", "service-account", "dry-run",
-				"active-deadline-seconds",
+				"active-deadline-seconds", "privileged", "startup-timeout", "keep-pod",
 			}
 			for _, name := range flags {
 				Expect(startCmd.Flags().Lookup(name)).NotTo(BeNil(), "flag --%s should be registered", name)

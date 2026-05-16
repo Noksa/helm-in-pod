@@ -17,8 +17,8 @@ func (m *Manager) CreatePodDisruptionBudget(ctx context.Context, operationID str
 	minAvailable := intstr.FromInt(1)
 	pdb := &policyv1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: fmt.Sprintf("%s-pdb-", Namespace),
-			Namespace:    Namespace,
+			GenerateName: fmt.Sprintf("%s-pdb-", hipconsts.Namespace),
+			Namespace:    hipconsts.Namespace,
 			Labels: map[string]string{
 				hipconsts.LabelOperationID: operationID,
 			},
@@ -33,7 +33,7 @@ func (m *Manager) CreatePodDisruptionBudget(ctx context.Context, operationID str
 		},
 	}
 
-	_, err := m.client().ClientSet().PolicyV1().PodDisruptionBudgets(Namespace).Create(ctx, pdb, metav1.CreateOptions{})
+	_, err := m.client().ClientSet().PolicyV1().PodDisruptionBudgets(hipconsts.Namespace).Create(ctx, pdb, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create PodDisruptionBudget: %w", err)
 	}
@@ -46,7 +46,7 @@ func (m *Manager) CreatePodDisruptionBudget(ctx context.Context, operationID str
 func (m *Manager) DeletePodDisruptionBudgets(ctx context.Context, operationID string) error {
 	labelSelector := fmt.Sprintf("%s=%s", hipconsts.LabelOperationID, operationID)
 
-	err := m.client().ClientSet().PolicyV1().PodDisruptionBudgets(Namespace).DeleteCollection(
+	err := m.client().ClientSet().PolicyV1().PodDisruptionBudgets(hipconsts.Namespace).DeleteCollection(
 		ctx,
 		metav1.DeleteOptions{},
 		metav1.ListOptions{

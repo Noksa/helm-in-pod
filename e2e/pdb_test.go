@@ -59,7 +59,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 
 			// Verify PDB was created and cleaned up for our specific pod
 			// Since the command completes quickly, PDB should be deleted
-			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.Namespace,
 				"-l", testLabel, "-o", "json")
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -75,7 +75,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 
 		It("should create PDB with minAvailable=1", func() {
 			// Get the daemon pod to extract operation-id
-			cmd := exec.Command("kubectl", "get", "pod", "-n", hipconsts.HelmInPodNamespace,
+			cmd := exec.Command("kubectl", "get", "pod", "-n", hipconsts.Namespace,
 				fmt.Sprintf("daemon-%s", sharedDaemonName), "-o", "json")
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -91,7 +91,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 			Expect(operationID).NotTo(BeEmpty(), "operation-id should not be empty")
 
 			// Verify PDB exists with matching operation-id
-			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.Namespace,
 				"-l", fmt.Sprintf("%s=%s", hipconsts.LabelOperationID, operationID), "-o", "json")
 			output, err = Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -119,14 +119,14 @@ var _ = Describe("PodDisruptionBudget", func() {
 
 		It("should clean up PDB when daemon pod is stopped", func() {
 			// Get operation-id before stopping
-			cmd := exec.Command("kubectl", "get", "pod", "-n", hipconsts.HelmInPodNamespace,
+			cmd := exec.Command("kubectl", "get", "pod", "-n", hipconsts.Namespace,
 				fmt.Sprintf("daemon-%s", sharedDaemonName), "-o", fmt.Sprintf("jsonpath={.metadata.labels.%s}", strings.ReplaceAll(hipconsts.LabelOperationID, "/", "\\/")))
 			operationID, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(operationID).NotTo(BeEmpty())
 
 			// Verify PDB exists
-			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.Namespace,
 				"-l", fmt.Sprintf("%s=%s", hipconsts.LabelOperationID, operationID))
 			_, err = Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -138,7 +138,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 			sharedDaemonName = "" // Mark as stopped so AfterEach doesn't try again
 
 			// Verify PDB is deleted
-			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.Namespace,
 				"-l", fmt.Sprintf("%s=%s", hipconsts.LabelOperationID, operationID), "-o", "json")
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -170,12 +170,12 @@ var _ = Describe("PodDisruptionBudget", func() {
 			}()
 
 			// Get operation IDs
-			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.Namespace,
 				fmt.Sprintf("daemon-%s", daemon1), "-o", fmt.Sprintf("jsonpath={.metadata.labels.%s}", strings.ReplaceAll(hipconsts.LabelOperationID, "/", "\\/")))
 			opID1, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.Namespace,
 				fmt.Sprintf("daemon-%s", daemon2), "-o", fmt.Sprintf("jsonpath={.metadata.labels.%s}", strings.ReplaceAll(hipconsts.LabelOperationID, "/", "\\/")))
 			opID2, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -188,12 +188,12 @@ var _ = Describe("PodDisruptionBudget", func() {
 			Expect(opID2).To(MatchRegexp(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`))
 
 			// Verify each has its own PDB
-			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.Namespace,
 				"-l", fmt.Sprintf("%s=%s", hipconsts.LabelOperationID, opID1))
 			_, err = Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.Namespace,
 				"-l", fmt.Sprintf("%s=%s", hipconsts.LabelOperationID, opID2))
 			_, err = Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -223,12 +223,12 @@ var _ = Describe("PodDisruptionBudget", func() {
 			// Use shared daemon - verify PDB status shows the pod is protected
 			podName := fmt.Sprintf("daemon-%s", sharedDaemonName)
 
-			cmd := exec.Command("kubectl", "get", "pod", "-n", hipconsts.HelmInPodNamespace,
+			cmd := exec.Command("kubectl", "get", "pod", "-n", hipconsts.Namespace,
 				podName, "-o", fmt.Sprintf("jsonpath={.metadata.labels.%s}", strings.ReplaceAll(hipconsts.LabelOperationID, "/", "\\/")))
 			operationID, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.Namespace,
 				"-l", fmt.Sprintf("%s=%s", hipconsts.LabelOperationID, operationID), "-o", "json")
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -260,7 +260,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Get first operation ID
-			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.Namespace,
 				fmt.Sprintf("daemon-%s", daemonName), "-o", fmt.Sprintf("jsonpath={.metadata.labels.%s}", strings.ReplaceAll(hipconsts.LabelOperationID, "/", "\\/")))
 			firstOpID, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -281,7 +281,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 			}()
 
 			// Get second operation ID
-			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.Namespace,
 				fmt.Sprintf("daemon-%s", daemonName), "-o", fmt.Sprintf("jsonpath={.metadata.labels.%s}", strings.ReplaceAll(hipconsts.LabelOperationID, "/", "\\/")))
 			secondOpID, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -291,7 +291,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 				"Recreated pod should have a new operation-id")
 
 			// Verify old PDB is gone
-			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.Namespace,
 				"-l", fmt.Sprintf("%s=%s", hipconsts.LabelOperationID, firstOpID), "-o", "json")
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -303,7 +303,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 				"Old PDB should be deleted")
 
 			// Verify new PDB exists
-			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.Namespace,
 				"-l", fmt.Sprintf("%s=%s", hipconsts.LabelOperationID, secondOpID))
 			_, err = Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -328,7 +328,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 
 			var operationID string
 			Eventually(func() string {
-				checkCmd := exec.Command("kubectl", "get", "pod", "-n", hipconsts.HelmInPodNamespace,
+				checkCmd := exec.Command("kubectl", "get", "pod", "-n", hipconsts.Namespace,
 					"-l", fmt.Sprintf("test=%s", testLabel),
 					"-o", fmt.Sprintf("jsonpath={.items[0].metadata.labels.%s}", strings.ReplaceAll(hipconsts.LabelOperationID, "/", "\\/")))
 				out, err := Run(checkCmd)
@@ -338,7 +338,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 				return out
 			}, "30s", "1s").ShouldNot(BeEmpty(), "Pod should be created with operation-id label")
 
-			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.Namespace,
 				"-l", fmt.Sprintf("test=%s", testLabel),
 				"-o", fmt.Sprintf("jsonpath={.items[0].metadata.labels.%s}", strings.ReplaceAll(hipconsts.LabelOperationID, "/", "\\/")))
 			operationID, err = Run(cmd)
@@ -346,7 +346,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 			Expect(operationID).NotTo(BeEmpty())
 
 			// Verify PDB exists
-			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.Namespace,
 				"-l", fmt.Sprintf("%s=%s", hipconsts.LabelOperationID, operationID))
 			_, err = Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -358,7 +358,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 
 			// Wait for all pods to be fully deleted (not just terminating)
 			Eventually(func() int {
-				cmd := exec.Command("kubectl", "get", "pods", "-n", hipconsts.HelmInPodNamespace, "-o", "json")
+				cmd := exec.Command("kubectl", "get", "pods", "-n", hipconsts.Namespace, "-o", "json")
 				output, err := Run(cmd)
 				if err != nil {
 					return -1
@@ -372,7 +372,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 			}, "60s", "2s").Should(Equal(0), "All pods should eventually be deleted after purge --all")
 
 			// Verify all PDBs are also deleted
-			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.HelmInPodNamespace, "-o", "json")
+			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.Namespace, "-o", "json")
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -397,14 +397,14 @@ var _ = Describe("PodDisruptionBudget", func() {
 			}()
 
 			// Get the pod's operation-id
-			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.Namespace,
 				fmt.Sprintf("daemon-%s", daemonName), "-o", fmt.Sprintf("jsonpath={.metadata.labels.%s}", strings.ReplaceAll(hipconsts.LabelOperationID, "/", "\\/")))
 			operationID, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(operationID).NotTo(BeEmpty(), "Pod should still have operation-id label")
 
 			// Verify NO PDB was created
-			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.Namespace,
 				"-l", fmt.Sprintf("%s=%s", hipconsts.LabelOperationID, operationID), "-o", "json")
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -430,13 +430,13 @@ var _ = Describe("PodDisruptionBudget", func() {
 			}()
 
 			// Get the pod's operation-id
-			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pod", "-n", hipconsts.Namespace,
 				fmt.Sprintf("daemon-%s", daemonName), "-o", fmt.Sprintf("jsonpath={.metadata.labels.%s}", strings.ReplaceAll(hipconsts.LabelOperationID, "/", "\\/")))
 			operationID, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify PDB WAS created
-			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.Namespace,
 				"-l", fmt.Sprintf("%s=%s", hipconsts.LabelOperationID, operationID))
 			_, err = Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "PDB should be created by default")
@@ -457,7 +457,7 @@ var _ = Describe("PodDisruptionBudget", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify no PDBs with our test label exist
-			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.HelmInPodNamespace, "-o", "json")
+			cmd = exec.Command("kubectl", "get", "pdb", "-n", hipconsts.Namespace, "-o", "json")
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 

@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -45,7 +46,7 @@ var _ = Describe("Dry Run", func() {
 			Expect(output).To(ContainSubstring("apiVersion: v1"))
 
 			// Verify no pod was actually created (use -o name to avoid stderr "No resources found" message)
-			cmd = exec.Command("kubectl", "get", "pods", "-n", hipconsts.HelmInPodNamespace,
+			cmd = exec.Command("kubectl", "get", "pods", "-n", hipconsts.Namespace,
 				"-l", testLabel, "-o", "name")
 			podOutput, _ := Run(cmd)
 			Expect(strings.TrimSpace(podOutput)).To(BeEmpty(), "No pod should be created in dry-run mode")
@@ -258,9 +259,91 @@ var _ = Describe("Dry Run", func() {
 			// Verify no daemon pod was created
 			cmd = exec.Command("kubectl", "get", "pod",
 				fmt.Sprintf("daemon-%s", daemonName),
-				"-n", hipconsts.HelmInPodNamespace, "--no-headers")
+				"-n", hipconsts.Namespace, "--no-headers")
 			podOutput, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).NotTo(Equal(0), "Pod should not exist: %s", podOutput)
+		})
+	})
+
+	Context("HELM_IN_POD_IMAGE env var", func() {
+		It("should use env var as the default image in dry-run output", func() {
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--dry-run",
+				"--", "echo test",
+			)
+			cmd.Env = append(os.Environ(), "HELM_IN_POD_IMAGE=alpine:3.20")
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			Expect(output).To(ContainSubstring("alpine:3.20"))
+		})
+
+		It("should allow --image to override HELM_IN_POD_IMAGE", func() {
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--dry-run",
+				"--image", "alpine:3.19",
+				"--", "echo test",
+			)
+			cmd.Env = append(os.Environ(), "HELM_IN_POD_IMAGE=alpine:3.20")
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			// Explicit flag wins over env var
+			Expect(output).To(ContainSubstring("alpine:3.19"))
+			Expect(output).NotTo(ContainSubstring("alpine:3.20"))
+		})
+	})
+
+	Context("HELM_IN_POD_NAMESPACE env var", func() {
+		It("should reflect the custom namespace in dry-run pod spec", func() {
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--dry-run",
+				"--", "echo test",
+			)
+			cmd.Env = append(os.Environ(), "HELM_IN_POD_NAMESPACE=my-e2e-ns")
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			Expect(output).To(ContainSubstring("namespace: my-e2e-ns"))
+		})
+	})
+
+	Context("--privileged flag", func() {
+		It("should include privileged: true in dry-run output when flag is set", func() {
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--dry-run",
+				"--privileged",
+				"--", "echo test",
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			Expect(output).To(ContainSubstring("privileged: true"))
+		})
+
+		It("should not include privileged in dry-run output by default", func() {
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--dry-run",
+				"--", "echo test",
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			Expect(output).NotTo(ContainSubstring("privileged: true"))
+		})
+	})
+
+	Context("--startup-timeout flag", func() {
+		It("should be accepted in dry-run mode without error", func() {
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--dry-run",
+				"--startup-timeout", "15m",
+				"--", "echo test",
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			Expect(output).To(ContainSubstring("kind: Pod"))
 		})
 	})
 })

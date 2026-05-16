@@ -64,7 +64,7 @@ var _ = Describe("Daemon Flags", func() {
 			By("getting first pod UID")
 			cmd = exec.Command("kubectl", "get", "pod",
 				fmt.Sprintf("daemon-%s", daemonName),
-				"-n", hipconsts.HelmInPodNamespace,
+				"-n", hipconsts.Namespace,
 				"-o", "jsonpath={.metadata.uid}")
 			firstUID, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -79,7 +79,7 @@ var _ = Describe("Daemon Flags", func() {
 			Eventually(func() string {
 				cmd = exec.Command("kubectl", "get", "pod",
 					fmt.Sprintf("daemon-%s", daemonName),
-					"-n", hipconsts.HelmInPodNamespace,
+					"-n", hipconsts.Namespace,
 					"-o", "jsonpath={.metadata.uid}")
 				uid, _ := Run(cmd)
 				return uid

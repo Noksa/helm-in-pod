@@ -18,7 +18,7 @@ var helmVersionRe = regexp.MustCompile(`v(\d+)\.`)
 func GetHelmMajorVersion(podName, podNamespace, image string) (int, error) {
 	kclient := operatorkclient.DefaultClient()
 	var stdout string
-	_, stderr, err := kclient.ExecInPod("helm --help", hipconsts.HelmInPodNamespace, podName, podNamespace,
+	_, stderr, err := kclient.ExecInPod("helm --help", hipconsts.Namespace, podName, podNamespace,
 		operatorkclient.WithRawCommand(true))
 	if err != nil {
 		if strings.Contains(stderr, "helm: not found") {
@@ -27,7 +27,7 @@ func GetHelmMajorVersion(podName, podNamespace, image string) (int, error) {
 		return 0, fmt.Errorf("failed to get helm version: %v, stderr: %s", err, stderr)
 	}
 
-	stdout, stderr, err = kclient.ExecInPod("helm version --template '{{ $.Version }}'", hipconsts.HelmInPodNamespace, podName, podNamespace)
+	stdout, stderr, err = kclient.ExecInPod("helm version --template '{{ $.Version }}'", hipconsts.Namespace, podName, podNamespace)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get helm version: %v, stderr: %s", err, stderr)
 	}
