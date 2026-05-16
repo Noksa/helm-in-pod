@@ -16,7 +16,9 @@ func Run(cmd *exec.Cmd) (string, error) {
 	dir, _ := GetProjectDir()
 	cmd.Dir = dir
 	_ = os.Chdir(cmd.Dir)
-	cmd.Env = os.Environ()
+	if cmd.Env == nil {
+		cmd.Env = os.Environ()
+	}
 	ginkgo.GinkgoWriter.Printf("  → %s\n", strings.Join(cmd.Args, " "))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -31,7 +33,9 @@ func RunWithExitCode(cmd *exec.Cmd) (string, int) {
 	dir, _ := GetProjectDir()
 	cmd.Dir = dir
 	_ = os.Chdir(cmd.Dir)
-	cmd.Env = os.Environ()
+	if cmd.Env == nil {
+		cmd.Env = os.Environ()
+	}
 	ginkgo.GinkgoWriter.Printf("  → %s\n", strings.Join(cmd.Args, " "))
 	output, err := cmd.CombinedOutput()
 	exitCode := 0

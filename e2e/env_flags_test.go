@@ -298,7 +298,7 @@ var _ = Describe("Environment Variable Flags", func() {
 		It("should mask --set values in the plugin log when flag is set", func() {
 			// The command uses --set (as part of a helm call that ignores it gracefully).
 			// With --suppress-secrets the plugin's own "Running '...' command" log line
-			// must show [REDACTED] instead of the secret value.
+			// must show *** instead of the secret value.
 			// Using `sh -c "echo done" --set password=topsecret` — sh ignores the
 			// extra positional args after the command string, so exit code is 0 and
 			// the echo output "done" does not contain the secret.
@@ -309,7 +309,7 @@ var _ = Describe("Environment Variable Flags", func() {
 			)
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
-			Expect(output).To(ContainSubstring("[REDACTED]"))
+			Expect(output).To(ContainSubstring("***"))
 			Expect(output).NotTo(ContainSubstring("topsecret"))
 		})
 
@@ -321,7 +321,7 @@ var _ = Describe("Environment Variable Flags", func() {
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(output).To(ContainSubstring("visiblesecret"))
-			Expect(output).NotTo(ContainSubstring("[REDACTED]"))
+			Expect(output).NotTo(ContainSubstring("***"))
 		})
 
 		It("should mask multiple --set flags", func() {
@@ -334,8 +334,8 @@ var _ = Describe("Environment Variable Flags", func() {
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(output).NotTo(ContainSubstring("secret1"))
 			Expect(output).NotTo(ContainSubstring("secret2"))
-			// Both flags should produce [REDACTED]
-			Expect(strings.Count(output, "[REDACTED]")).To(BeNumerically(">=", 2))
+			// Both flags should produce ***
+			Expect(strings.Count(output, "***")).To(BeNumerically(">=", 2))
 		})
 
 		It("should mask --set values in daemon exec log", func() {
@@ -353,7 +353,7 @@ var _ = Describe("Environment Variable Flags", func() {
 				"--", `sh -c "echo done" --set db_password=daemon_secret`)
 			output, exitCode := RunWithExitCode(execCmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
-			Expect(output).To(ContainSubstring("[REDACTED]"))
+			Expect(output).To(ContainSubstring("***"))
 			Expect(output).NotTo(ContainSubstring("daemon_secret"))
 		})
 	})

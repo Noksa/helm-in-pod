@@ -86,6 +86,14 @@ jobs:
         env:
           KIND_NODE_IMAGE: ${{ matrix.k8s-version }}
 
+      - name: Upload e2e diagnostic reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-reports-k8s-${{ matrix.k8s-version || 'latest' }}
+          path: e2e-reports/
+          if-no-files-found: ignore
+
       - name: Teardown kind cluster
         if: always()
         run: make test-e2e-teardown

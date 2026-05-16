@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -42,7 +43,7 @@ var _ = Describe("New flags and env vars", func() {
 			defaultImage := "docker.io/noksa/kubectl-helm:v1.34.5-v4.1.1"
 
 			cmd := BuildHelmInPodCommand("--labels", testLabel, "--keep-pod", "--", "echo ok")
-			cmd.Env = append(cmd.Env, fmt.Sprintf("HELM_IN_POD_IMAGE=%s", defaultImage))
+			cmd.Env = append(os.Environ(), fmt.Sprintf("HELM_IN_POD_IMAGE=%s", defaultImage))
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(output).To(ContainSubstring("ok"))
@@ -74,7 +75,7 @@ var _ = Describe("New flags and env vars", func() {
 				"--image", defaultImage,
 				"--", "echo override-ok",
 			)
-			cmd.Env = append(cmd.Env, "HELM_IN_POD_IMAGE=this-image-does-not-exist:latest")
+			cmd.Env = append(os.Environ(), "HELM_IN_POD_IMAGE=this-image-does-not-exist:latest")
 			output, exitCode := RunWithExitCode(cmd)
 			// If the env var were honored over the flag, the non-existent image
 			// would cause a pod startup failure (ImagePullBackOff). Exit 0 confirms
@@ -102,7 +103,7 @@ var _ = Describe("New flags and env vars", func() {
 
 			// --keep-pod so the pod is still there when we inspect it
 			cmd := BuildHelmInPodCommand("--labels", testLabel, "--keep-pod", "--", "echo ns-ok")
-			cmd.Env = append(cmd.Env, fmt.Sprintf("HELM_IN_POD_NAMESPACE=%s", customNS))
+			cmd.Env = append(os.Environ(), fmt.Sprintf("HELM_IN_POD_NAMESPACE=%s", customNS))
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(output).To(ContainSubstring("ns-ok"))
@@ -130,7 +131,7 @@ var _ = Describe("New flags and env vars", func() {
 			})
 
 			cmd := BuildHelmInPodCommand("--labels", testLabel, "--", "echo sa-ok")
-			cmd.Env = append(cmd.Env, fmt.Sprintf("HELM_IN_POD_NAMESPACE=%s", customNS))
+			cmd.Env = append(os.Environ(), fmt.Sprintf("HELM_IN_POD_NAMESPACE=%s", customNS))
 			_, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0))
 
