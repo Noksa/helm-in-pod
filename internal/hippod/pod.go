@@ -103,18 +103,9 @@ func (m *Manager) deletePodsMatchingSelector(selector string) error {
 
 func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOptions cmdoptions.PurgeOptions) error {
 	if purgeOptions.All {
-		pods, err := m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).List(m.ctx, metav1.ListOptions{})
-		if err != nil {
-			return err
-		}
-		for i := range pods.Items {
-			pod := &pods.Items[i]
-			logz.Host().Debug().Msgf("Deleting '%v' pod", pod.Name)
-			if err := m.client().ClientSet().CoreV1().Pods(hipconsts.Namespace).Delete(m.ctx, pod.Name, metav1.DeleteOptions{}); err != nil {
-				return err
-			}
-		}
-		return nil
+		// Empty selector = all pods in namespace. deletePodsMatchingSelector also
+		// cleans the associated PodDisruptionBudget for each pod it removes.
+		return m.deletePodsMatchingSelector("")
 	}
 
 	// Include the per-process operation ID so each process only deletes its own pods.
@@ -124,13 +115,13 @@ func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOption
 	for k, v := range execOptions.Labels {
 		selector = fmt.Sprintf("%v,%v=%v", selector, k, v)
 	}
-	if err := m.deletePodsMatchingSelector(selector); err != nil {
-		return err
-	}
+	return m.deletePodsMatchingSelector(selector)
+}
 
-	// Also clean up kept pods from previous runs on this host so they don't accumulate.
-	// Kept pods are labeled helm-in-pod/kept=true and are safe to remove once the user
-	// starts a new exec (they've had time to inspect the pod between runs).
+// DeleteKeptPods removes all pods on this host that were kept alive via --keep-pod.
+// Called by purge so kept pods do not accumulate. NOT called by CreateHelmPod to
+// avoid deleting another concurrent test's kept pod mid-execution.
+func (m *Manager) DeleteKeptPods() error {
 	keptSelector := fmt.Sprintf("host=%v,%v=true", m.myHostname, hipconsts.LabelKept)
 	return m.deletePodsMatchingSelector(keptSelector)
 }

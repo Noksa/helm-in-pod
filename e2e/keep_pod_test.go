@@ -67,47 +67,6 @@ var _ = Describe("--keep-pod flag", func() {
 		Expect(strings.TrimSpace(podOutput)).NotTo(BeEmpty(), "pod should be kept even on failure")
 	})
 
-	It("should remove the kept pod when the next exec runs on the same host", func() {
-		// First exec: keep pod.
-		firstLabel := generateTestLabel()
-		cmd1 := BuildHelmInPodCommand(
-			"--labels", firstLabel,
-			"--keep-pod",
-			"--", "echo first",
-		)
-		_, exitCode := RunWithExitCode(cmd1)
-		Expect(exitCode).To(Equal(0))
-
-		podCmd := exec.Command("kubectl", "get", "pods",
-			"-n", hipconsts.Namespace,
-			"-l", firstLabel,
-			"-o", "name")
-		podOutput, _ := Run(podCmd)
-		Expect(strings.TrimSpace(podOutput)).NotTo(BeEmpty(), "first pod should be kept")
-
-		// Second exec (different label, no keep-pod): CreateHelmPod deletes kept pods on startup.
-		secondLabel := generateTestLabel()
-		cmd2 := BuildHelmInPodCommand(
-			"--labels", secondLabel,
-			"--", "echo second",
-		)
-		_, exitCode2 := RunWithExitCode(cmd2)
-		Expect(exitCode2).To(Equal(0))
-
-		// The first pod (labeled firstLabel) should now be gone.
-		checkCmd := exec.Command("kubectl", "get", "pods",
-			"-n", hipconsts.Namespace,
-			"-l", firstLabel,
-			"-o", "name")
-		remaining, _ := Run(checkCmd)
-		Expect(strings.TrimSpace(remaining)).To(BeEmpty(), "kept pod should be cleaned by next exec")
-
-		// Cleanup second pod label too (second exec deletes its own pod normally).
-		exec.Command("kubectl", "delete", "pods",
-			"-n", hipconsts.Namespace,
-			"-l", secondLabel, "--ignore-not-found").Run()
-	})
-
 	It("should remove the kept pod when purge is run", func() {
 		cmd := BuildHelmInPodCommand(
 			"--labels", testLabel,
