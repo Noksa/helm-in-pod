@@ -47,6 +47,7 @@ When `helm` runs commands from your local machine, network latency to distant Ku
 | 🐳 **Custom Images**         | Use any Docker image for execution                  |
 | 💾 **Volume Mounts**         | Mount PVCs, secrets, configmaps, and more into pods |
 | 🔍 **Dry Run**               | Preview pod specs as YAML before creating anything  |
+| 🐛 **Keep Pod**              | Retain the pod after failure for interactive debugging |
 
 ---
 
@@ -155,7 +156,7 @@ helm in-pod exec [FLAGS] -- "COMMAND"
 
 | Flag                  | Short | Description                                                                  |
 |-----------------------|-------|------------------------------------------------------------------------------|
-| `--image`             | `-i`  | Docker image to use (run `helm in-pod exec --help` for current default) |
+| `--image`             | `-i`  | Docker image to use (run `helm in-pod exec --help` for current default). Overrides `HELM_IN_POD_IMAGE` env var |
 | `--cpu-request`       |       | Pod's CPU request (default: `1100m`)                                          |
 | `--cpu-limit`         |       | Pod's CPU limit (default: `1100m`)                                            |
 | `--memory-request`    |       | Pod's memory request (default: `500Mi`)                                       |
@@ -174,6 +175,9 @@ helm in-pod exec [FLAGS] -- "COMMAND"
 | `--service-account`   |       | Service account for the pod (default: `helm-in-pod`)                         |
 | `--dry-run`           |       | Print the pod spec as YAML without creating anything                         |
 | `--active-deadline-seconds` | | Maximum duration in seconds the pod is allowed to run. Kubernetes terminates the pod once this deadline is exceeded, regardless of whether the client is still connected. Useful to avoid orphaned pods in CI/CD pipelines. `0` means no deadline (default) |
+| `--keep-pod`          |       | Keep the pod alive after exec completes (for debugging). The pod is removed when `helm in-pod purge` is run |
+| `--startup-timeout`   |       | How long to wait for the pod to become ready (default: `5m`). Increase on clusters with slow image registries |
+| `--privileged`        |       | Run the container in privileged mode (requires cluster policy to allow it) |
 
 <details>
 <summary>⚠️ <strong>Deprecated Flags</strong></summary>
@@ -201,6 +205,8 @@ When using a deprecated flag, its value is applied to both the request and limit
 | `--copy-attempts`        |       | Retry count for copy actions (default: 3)               |
 | `--update-repo-attempts` |       | Retry count for repo update actions (default: 3)        |
 | `--copy-from`            |       | Copy files/dirs from pod to host after execution (repeatable). Format: `/pod/path:/host/path` |
+| `--env-file`             |       | Read environment variables from a file (`KEY=VALUE` format, supports comments and quotes). Repeatable. Explicit `--env` flags take precedence |
+| `--suppress-secrets`     | `-q`  | Mask values of `--set`, `--set-string`, `--set-file`, `--set-json` flags in log output |
 
 ---
 
@@ -210,6 +216,8 @@ When using a deprecated flag, its value is applied to both the request and limit
 |----------------------------|-----------------------------------------------------------------------------|
 | `HELM_KUBECONTEXT`         | Override the Kubernetes context used by the plugin. When set, the plugin connects to this context instead of the current default. |
 | `HELM_IN_POD_DAEMON_NAME`  | Default daemon name for `daemon` subcommands, so you can omit `--name`. See [DAEMON.md](DAEMON.md). |
+| `HELM_IN_POD_IMAGE`        | Default image for all pods created by the plugin. Equivalent to passing `--image` on every command. An explicit `--image` flag always takes precedence. |
+| `HELM_IN_POD_NAMESPACE`    | Kubernetes namespace for all plugin resources (pods, ServiceAccount, ClusterRoleBinding, PDBs). Defaults to `helm-in-pod`. |
 
 ---
 
@@ -578,6 +586,27 @@ helm in-pod daemon exec --name dev \
 
 </details>
 
+### 🐛 Keep Pod for Debugging
+
+<details>
+<summary><strong>Inspect a pod after a failed command</strong></summary>
+
+When a command fails, the pod is normally deleted immediately. `--keep-pod` leaves it alive so you can exec in and investigate:
+
+```bash
+helm in-pod exec --keep-pod -- "helm upgrade myapp repo/chart -f values.yaml"
+
+# Pod is still alive — inspect it
+kubectl exec -n helm-in-pod <pod-name> -- sh
+
+# Clean up when done
+helm in-pod purge
+```
+
+> 💡 The pod name is printed in the plugin output when `--keep-pod` is used. Kept pods persist until `helm in-pod purge` is run.
+
+</details>
+
 ### 📊 Daemon Status & List
 
 <details>
@@ -620,10 +649,10 @@ helm in-pod purge --all
 
 | Command              | What it removes                                                                 |
 |----------------------|---------------------------------------------------------------------------------|
-| `purge`              | Leftover pods (from the current host), associated PDBs, and the `helm-in-pod` ClusterRoleBinding |
-| `purge --all`        | All pods in the `helm-in-pod` namespace (regardless of host), associated PDBs, and the ClusterRoleBinding |
+| `purge`              | Pods kept via `--keep-pod` on the current host, their PDBs, and the ClusterRoleBinding |
+| `purge --all`        | Every pod in the namespace (regardless of host), every PDB (including orphans), and the ClusterRoleBinding |
 
-> 💡 `purge --all` does not delete the `helm-in-pod` namespace itself or the ServiceAccount. It removes all pods without filtering by host label.
+> 💡 `purge --all` does not delete the namespace itself or the ServiceAccount. `purge` (without `--all`) is host-scoped — it only touches pods created on the current machine.
 
 
 ---
