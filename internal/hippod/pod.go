@@ -103,9 +103,13 @@ func (m *Manager) deletePodsMatchingSelector(selector string) error {
 
 func (m *Manager) DeleteHelmPods(execOptions cmdoptions.ExecOptions, purgeOptions cmdoptions.PurgeOptions) error {
 	if purgeOptions.All {
-		// Empty selector = all pods in namespace. deletePodsMatchingSelector also
-		// cleans the associated PodDisruptionBudget for each pod it removes.
-		return m.deletePodsMatchingSelector("")
+		// Delete all pods (and each pod's associated PDB via deletePodsMatchingSelector).
+		if err := m.deletePodsMatchingSelector(""); err != nil {
+			return err
+		}
+		// Also wipe any orphaned PDBs whose pod was already deleted before cleanup
+		// ran (e.g. pods killed by activeDeadlineSeconds or another cleanup path).
+		return m.deleteAllPodDisruptionBudgets()
 	}
 
 	// Include the per-process operation ID so each process only deletes its own pods.

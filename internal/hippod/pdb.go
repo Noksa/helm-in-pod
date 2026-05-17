@@ -60,3 +60,19 @@ func (m *Manager) DeletePodDisruptionBudgets(ctx context.Context, operationID st
 	logz.Host().Debug().Msgf("Deleted PodDisruptionBudgets for operation %s", operationID)
 	return nil
 }
+
+// deleteAllPodDisruptionBudgets removes every PDB in the plugin namespace,
+// including orphaned ones whose pod was already deleted before cleanup ran.
+// Used by purge --all for a complete namespace sweep.
+func (m *Manager) deleteAllPodDisruptionBudgets() error {
+	err := m.client().ClientSet().PolicyV1().PodDisruptionBudgets(hipconsts.Namespace).DeleteCollection(
+		m.ctx,
+		metav1.DeleteOptions{},
+		metav1.ListOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to delete all PodDisruptionBudgets: %w", err)
+	}
+	logz.Host().Debug().Msg("Deleted all PodDisruptionBudgets in namespace")
+	return nil
+}
