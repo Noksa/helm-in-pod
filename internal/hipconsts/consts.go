@@ -5,6 +5,11 @@ package hipconsts
 // "helm-in-pod". Both hippod and hipns read this var directly.
 var Namespace = "helm-in-pod"
 
+// ContainerName is the fixed name given to the single container inside every
+// plugin pod. It is always "helm-in-pod" regardless of the active Namespace
+// so that ExecInPod calls stay correct when HELM_IN_POD_NAMESPACE is set.
+const ContainerName = "helm-in-pod"
+
 const (
 	AnnotationHomeDirectory      = "helm-in-pod/home-directory"
 	AnnotationHelmFound          = "helm-in-pod/helm-found"

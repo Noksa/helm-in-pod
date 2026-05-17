@@ -41,7 +41,7 @@ func (m *Manager) GetPodUserInfo(pod *corev1.Pod) (*UserInfo, error) {
 		var err error
 		stdout, stderr, err = m.client().ExecInPod(
 			`echo "${HOME}:::$(whoami):::$(id)"`,
-			hipconsts.Namespace, pod.Name, pod.Namespace)
+			hipconsts.ContainerName, pod.Name, pod.Namespace)
 		if err != nil {
 			return fmt.Errorf("%s: %w", stderr, err)
 		}
@@ -91,7 +91,7 @@ func (m *Manager) SyncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOpti
 			logz.Pod().Debug().Msgf("Creating %v/.config/helm directory", homeDirectory)
 			_, stderr, err := m.client().ExecInPod(
 				`set +e; mkdir -p "${HOME}/.config/helm" &>/dev/null`,
-				hipconsts.Namespace, pod.Name, pod.Namespace)
+				hipconsts.ContainerName, pod.Name, pod.Namespace)
 			if err != nil {
 				return fmt.Errorf("%s: %w", stderr, err)
 			}
@@ -133,7 +133,7 @@ func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 				cmdToUse = fmt.Sprintf("%v --fail-on-repo-update-fail", cmdToUse)
 			}
 			stdout, stderr, err := m.client().ExecInPod(cmdToUse,
-				hipconsts.Namespace, pod.Name, pod.Namespace,
+				hipconsts.ContainerName, pod.Name, pod.Namespace,
 				operatorkclient.WithRawCommand(true))
 			if err != nil {
 				return fmt.Errorf("%w\n%v\n%v", err, stdout, stderr)
@@ -152,7 +152,7 @@ func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 				cmdToUse = fmt.Sprintf("%v --fail-on-repo-update-fail", cmdToUse)
 			}
 			stdout, stderr, err := m.client().ExecInPod(cmdToUse,
-				hipconsts.Namespace, pod.Name, pod.Namespace,
+				hipconsts.ContainerName, pod.Name, pod.Namespace,
 				operatorkclient.WithRawCommand(true))
 			if err != nil {
 				return fmt.Errorf("%w\n%v\n%v", err, stdout, stderr)
@@ -172,7 +172,7 @@ func (m *Manager) CopyUserFiles(pod *corev1.Pod, opts cmdoptions.ExecOptions, ex
 	if len(cleanPaths) > 0 {
 		cmd := fmt.Sprintf("rm -rf %s", strings.Join(cleanPaths, " "))
 		logz.Pod().Debug().Msgf("Cleaning up files: %v", cmd)
-		stdOut, stdErr, err := m.client().ExecInPod(cmd, hipconsts.Namespace, pod.Name, pod.Namespace)
+		stdOut, stdErr, err := m.client().ExecInPod(cmd, hipconsts.ContainerName, pod.Name, pod.Namespace)
 		if err != nil {
 			return fmt.Errorf("%v\n%v\n%v", err, stdErr, stdOut)
 		}
@@ -202,7 +202,7 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 		err := hipretry.RetryWithContext(m.ctx, opts.CopyAttempts, func() error {
 			_, stderr, err := m.client().ExecInPod(
 				fmt.Sprintf("mv %s %s", hipconsts.StagedScriptPath, hipconsts.WrappedScriptPath),
-				hipconsts.Namespace, pod.Name, pod.Namespace)
+				hipconsts.ContainerName, pod.Name, pod.Namespace)
 			if err != nil {
 				return fmt.Errorf("%s: %w", stderr, err)
 			}
@@ -274,7 +274,7 @@ func (m *Manager) ExecuteCommand(ctx context.Context, pod *corev1.Pod, command s
 		// up rather than spinning forever and hammering the API server.
 		for range 20 {
 			_, _, err := m.client().ExecInPod("kill -term 1",
-				hipconsts.Namespace, pod.Name, pod.Namespace,
+				hipconsts.ContainerName, pod.Name, pod.Namespace,
 				operatorkclient.WithRawCommand(true))
 			if err == nil {
 				return
@@ -391,7 +391,7 @@ func (m *Manager) ExecuteCommandInDaemon(ctx context.Context, pod *corev1.Pod, c
 
 	logz.Pod().Info().Msgf("Running '%v' command", color.YellowString(displayCmd))
 
-	_, _, err = m.client().ExecInPod(fmt.Sprintf("sh %s", scriptPath), hipconsts.Namespace, pod.Name, pod.Namespace,
+	_, _, err = m.client().ExecInPod(fmt.Sprintf("sh %s", scriptPath), hipconsts.ContainerName, pod.Name, pod.Namespace,
 		operatorkclient.WithContext(ctx),
 		operatorkclient.WithTimeout(timeout),
 		operatorkclient.WithRawCommand(true),
@@ -619,7 +619,7 @@ func (m *Manager) SignalCopyDone(pod *corev1.Pod) {
 	logz.HostPod().Debug().Msg("Signaling copy-done")
 	_, _, err := m.client().ExecInPod(
 		fmt.Sprintf("touch %s", hipconsts.CopyFromDoneFile),
-		hipconsts.Namespace, pod.Name, pod.Namespace,
+		hipconsts.ContainerName, pod.Name, pod.Namespace,
 		operatorkclient.WithRawCommand(true))
 	if err != nil {
 		logz.Host().Debug().Msgf("Failed to signal copy-done (pod may have already exited): %v", err)

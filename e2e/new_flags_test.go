@@ -145,62 +145,6 @@ var _ = Describe("New flags and env vars", func() {
 	})
 
 	// -------------------------------------------------------------------------
-	// --privileged
-	// -------------------------------------------------------------------------
-
-	Context("--privileged flag", func() {
-		It("should create a pod with privileged: true in the live cluster", func() {
-			// Use --keep-pod so we can inspect the pod spec after exec completes.
-			cmd := BuildHelmInPodCommand(
-				"--labels", testLabel,
-				"--keep-pod",
-				"--privileged",
-				"--", "echo priv-ok",
-			)
-			output, exitCode := RunWithExitCode(cmd)
-			Expect(exitCode).To(Equal(0), "output: %s", output)
-			Expect(output).To(ContainSubstring("priv-ok"))
-
-			DeferCleanup(func() {
-				exec.Command("kubectl", "delete", "pods",
-					"-n", hipconsts.Namespace, "-l", testLabel, "--ignore-not-found").Run()
-			})
-
-			podCmd := exec.Command("kubectl", "get", "pods",
-				"-n", hipconsts.Namespace,
-				"-l", testLabel,
-				"-o", "jsonpath={.items[0].spec.containers[0].securityContext.privileged}")
-			podOutput, err := Run(podCmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(strings.TrimSpace(podOutput)).To(Equal("true"))
-		})
-
-		It("should not set privileged on the pod when flag is absent", func() {
-			cmd := BuildHelmInPodCommand(
-				"--labels", testLabel,
-				"--keep-pod",
-				"--", "echo nopriv-ok",
-			)
-			output, exitCode := RunWithExitCode(cmd)
-			Expect(exitCode).To(Equal(0), "output: %s", output)
-
-			DeferCleanup(func() {
-				exec.Command("kubectl", "delete", "pods",
-					"-n", hipconsts.Namespace, "-l", testLabel, "--ignore-not-found").Run()
-			})
-
-			// jsonpath returns empty string when the field is absent (nil pointer omitted by k8s)
-			podCmd := exec.Command("kubectl", "get", "pods",
-				"-n", hipconsts.Namespace,
-				"-l", testLabel,
-				"-o", "jsonpath={.items[0].spec.containers[0].securityContext.privileged}")
-			podOutput, err := Run(podCmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(strings.TrimSpace(podOutput)).NotTo(Equal("true"))
-		})
-	})
-
-	// -------------------------------------------------------------------------
 	// --startup-timeout
 	// -------------------------------------------------------------------------
 

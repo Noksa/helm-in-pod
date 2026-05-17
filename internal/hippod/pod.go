@@ -340,7 +340,7 @@ func (m *Manager) CopyFilesBundleWithBootInfo(pod *corev1.Pod, entries []helmtar
 		logz.HostPod().Info().Msg("Copying files bundle and collecting pod boot info")
 
 		var stdout bytes.Buffer
-		_, stderr, execErr := m.client().ExecInPod(cmd, hipconsts.Namespace, pod.Name, pod.Namespace,
+		_, stderr, execErr := m.client().ExecInPod(cmd, hipconsts.ContainerName, pod.Name, pod.Namespace,
 			operatorkclient.WithContext(m.ctx),
 			operatorkclient.WithTimeout(time.Minute*10),
 			operatorkclient.WithStdin(bytes.NewReader(tarBytes)),
@@ -406,7 +406,7 @@ func (m *Manager) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string
 	return hipretry.RetryWithContext(m.ctx, attempts, func() error {
 		logz.HostPod().Info().Msgf("Copying %v to %v", color.CyanString(srcPath), color.MagentaString(destPath))
 
-		_, stderr, err := m.client().ExecInPod(cmd, hipconsts.Namespace, pod.Name, pod.Namespace,
+		_, stderr, err := m.client().ExecInPod(cmd, hipconsts.ContainerName, pod.Name, pod.Namespace,
 			operatorkclient.WithContext(m.ctx),
 			operatorkclient.WithTimeout(time.Minute*10),
 			operatorkclient.WithStdin(bytes.NewReader(buffer.Bytes())),
@@ -423,7 +423,7 @@ func (m *Manager) CopyFileToPod(pod *corev1.Pod, srcPath string, destPath string
 // isPodPathRegularFile checks whether podPath is a regular file inside the pod.
 func (m *Manager) isPodPathRegularFile(pod *corev1.Pod, podPath string) bool {
 	cmd := fmt.Sprintf("test -f %s", podPath)
-	_, _, err := m.client().ExecInPod(cmd, hipconsts.Namespace, pod.Name, pod.Namespace,
+	_, _, err := m.client().ExecInPod(cmd, hipconsts.ContainerName, pod.Name, pod.Namespace,
 		operatorkclient.WithRawCommand(true))
 	return err == nil
 }
@@ -466,7 +466,7 @@ func (m *Manager) CopyFileFromPod(pod *corev1.Pod, podPath string, hostPath stri
 		logz.HostPod().Info().Msgf("Copying %v to %v", color.MagentaString(podPath), color.CyanString(hostPath))
 
 		var stdout bytes.Buffer
-		_, _, err := m.client().ExecInPod(tarCmd, hipconsts.Namespace, pod.Name, pod.Namespace,
+		_, _, err := m.client().ExecInPod(tarCmd, hipconsts.ContainerName, pod.Name, pod.Namespace,
 			operatorkclient.WithContext(m.ctx),
 			operatorkclient.WithTimeout(time.Minute*10),
 			operatorkclient.WithRawCommand(true),
@@ -706,7 +706,7 @@ func (m *Manager) OpenInteractiveShell(ctx context.Context, pod *corev1.Pod, she
 		_ = restoreTerminal(oldState)
 	}()
 
-	_, _, err = m.client().ExecInPod(shell, hipconsts.Namespace, pod.Name, pod.Namespace,
+	_, _, err = m.client().ExecInPod(shell, hipconsts.ContainerName, pod.Name, pod.Namespace,
 		operatorkclient.WithContext(ctx),
 		operatorkclient.WithTTY(true),
 		operatorkclient.WithRawCommand(true),
