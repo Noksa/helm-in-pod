@@ -55,9 +55,9 @@ When `helm` runs commands from your local machine, network latency to distant Ku
 
 - 🎯 **Helm 4** installed on host machine
 
-> ⚠️ **Helm 3 users:** v0.8.0 is the last supported version. Install it with:
+> ⚠️ **Helm 3 users:** v0.8.1 is the last supported version. Install it with:
 > ```bash
-> helm plugin install --version v0.8.0 https://github.com/Noksa/helm-in-pod
+> helm plugin install --version v0.8.1 https://github.com/Noksa/helm-in-pod
 > ```
 > See [#20](https://github.com/Noksa/helm-in-pod/issues/20) for details.
 
