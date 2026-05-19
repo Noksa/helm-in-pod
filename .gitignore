@@ -11,3 +11,4 @@ coverage.html
 *.coverprofile
 RELEASE_NOTES.md
 GPG_KEYRING_BASE64.txt
+e2e-reports/
