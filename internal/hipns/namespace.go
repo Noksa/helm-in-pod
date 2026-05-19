@@ -2,11 +2,15 @@ package hipns
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
@@ -81,7 +85,33 @@ func (m *Manager) CreateClusterRoleBinding() error {
 			return err
 		}
 	}
-	return nil
+	return m.waitForClusterRoleBindingEffective()
+}
+
+func (m *Manager) waitForClusterRoleBindingEffective() error {
+	cs := operatorkclient.DefaultClient().ClientSet()
+	saUser := "system:serviceaccount:" + hipconsts.Namespace + ":" + hipconsts.Namespace
+	err := wait.PollUntilContextTimeout(m.ctx, time.Second, 2*time.Minute, true, func(ctx context.Context) (bool, error) {
+		review := &authorizationv1.SubjectAccessReview{
+			Spec: authorizationv1.SubjectAccessReviewSpec{
+				ResourceAttributes: &authorizationv1.ResourceAttributes{
+					Verb:     "get",
+					Group:    "apps",
+					Resource: "deployments",
+				},
+				User: saUser,
+			},
+		}
+		result, err := cs.AuthorizationV1().SubjectAccessReviews().Create(ctx, review, metav1.CreateOptions{})
+		if err != nil {
+			return false, err
+		}
+		return result.Status.Allowed, nil
+	})
+	if wait.Interrupted(err) {
+		return fmt.Errorf("timeout waiting for ClusterRoleBinding to become effective for %s", saUser)
+	}
+	return err
 }
 
 func (m *Manager) DeleteClusterRoleBinding() error {
