@@ -18,7 +18,8 @@ import (
 )
 
 type Manager struct {
-	ctx context.Context
+	ctx     context.Context
+	kclient *operatorkclient.Client
 }
 
 func NewManager(ctx context.Context) *Manager {
@@ -30,11 +31,18 @@ func (m *Manager) WithContext(ctx context.Context) *Manager {
 	if ctx == nil {
 		ctx = m.ctx
 	}
-	return &Manager{ctx: ctx}
+	return &Manager{ctx: ctx, kclient: m.kclient}
+}
+
+func (m *Manager) client() *operatorkclient.Client {
+	if m.kclient != nil {
+		return m.kclient
+	}
+	return operatorkclient.DefaultClient()
 }
 
 func (m *Manager) PrepareNs() error {
-	cs := operatorkclient.DefaultClient().ClientSet()
+	cs := m.client().ClientSet()
 	ns, err := cs.CoreV1().Namespaces().Get(m.ctx, hipconsts.Namespace, metav1.GetOptions{})
 	if client.IgnoreNotFound(err) != nil {
 		return err
@@ -65,7 +73,7 @@ func (m *Manager) PrepareNs() error {
 }
 
 func (m *Manager) CreateClusterRoleBinding() error {
-	cs := operatorkclient.DefaultClient().ClientSet()
+	cs := m.client().ClientSet()
 	crb, err := cs.RbacV1().ClusterRoleBindings().Get(m.ctx, hipconsts.Namespace, metav1.GetOptions{})
 	if client.IgnoreNotFound(err) != nil {
 		return err
@@ -116,7 +124,7 @@ func (m *Manager) waitForClusterRoleBindingEffective() error {
 }
 
 func (m *Manager) DeleteClusterRoleBinding() error {
-	cs := operatorkclient.DefaultClient().ClientSet()
+	cs := m.client().ClientSet()
 	crb, err := cs.RbacV1().ClusterRoleBindings().Get(m.ctx, hipconsts.Namespace, metav1.GetOptions{})
 	if client.IgnoreNotFound(err) != nil {
 		return err

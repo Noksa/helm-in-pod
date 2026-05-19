@@ -42,6 +42,7 @@ type Manager struct {
 	myHostname   string
 	interrupted  atomic.Bool
 	invocationID string // unique per process; prevents concurrent instances from deleting each other's pods
+	kclient      *operatorkclient.Client
 }
 
 func NewManager(ctx context.Context, hostname string) *Manager {
@@ -63,9 +64,13 @@ func (m *Manager) WithContext(ctx context.Context) *Manager {
 		ctx:          ctx,
 		myHostname:   m.myHostname,
 		invocationID: m.invocationID,
+		kclient:      m.kclient,
 	}
 }
 func (m *Manager) client() *operatorkclient.Client {
+	if m.kclient != nil {
+		return m.kclient
+	}
 	return operatorkclient.DefaultClient()
 }
 

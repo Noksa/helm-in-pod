@@ -43,4 +43,50 @@ var _ = Describe("MaskSetValues", func() {
 			"helm upgrade --set connStr=postgres://user:pass@host/db?opt=val myapp",
 			"helm upgrade --set connStr=*** myapp"),
 	)
+
+	DescribeTable("narrow edge cases — regression guards",
+		func(input, expected string) {
+			Expect(cmdoptions.MaskSetValues(input)).To(Equal(expected))
+		},
+		Entry("double-quoted value with spaces is masked once",
+			`helm upgrade --set "key=value with spaces" myapp`,
+			`helm upgrade --set "key=*** myapp`),
+		Entry("single-quoted value with spaces is masked once",
+			`helm upgrade --set 'key=value with spaces' myapp`,
+			`helm upgrade --set 'key=*** myapp`),
+		Entry("shell-escaped quotes around value are masked",
+			`helm upgrade --set key=\"value\" myapp`,
+			`helm upgrade --set key=*** myapp`),
+		Entry("unclosed single quote consumes rest of command but still masks value",
+			`helm upgrade --set 'key=unfinished myapp`,
+			`helm upgrade --set 'key=***`),
+		Entry("value with multiple equals signs only masks after first",
+			"helm upgrade --set token=ey=encoded= myapp",
+			"helm upgrade --set token=*** myapp"),
+		Entry("empty value is still masked",
+			"helm upgrade --set key= myapp",
+			"helm upgrade --set key=*** myapp"),
+		Entry("--set without trailing arg does not crash",
+			"helm upgrade --set",
+			"helm upgrade --set"),
+		Entry("--set with no = in next arg is left unchanged (no value to mask)",
+			"helm upgrade --set keyonly myapp",
+			"helm upgrade --set keyonly myapp"),
+	)
+
+	DescribeTable("KNOWN LIMITATIONS — comma inside quoted values leaks fragments",
+		func(input, expected string) {
+			Expect(cmdoptions.MaskSetValues(input)).To(Equal(expected),
+				"comma-in-quoted-value leak: if this test fails after a fix, update the expected string")
+		},
+		Entry("double-quoted value containing commas leaks fragments after first comma",
+			`helm upgrade --set list="a,b,c" myapp`,
+			`helm upgrade --set list=***,b,c" myapp`),
+		Entry("--set= equals-joined with comma in quoted value leaks fragments",
+			`helm upgrade --set=key="val,with,commas" myapp`,
+			`helm upgrade --set=key=***,with,commas" myapp`),
+		Entry("backslash-escaped comma is not respected, leaks fragment",
+			`helm upgrade --set key=a\,b,key2=c myapp`,
+			`helm upgrade --set key=***,b,key2=*** myapp`),
+	)
 })
