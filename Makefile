@@ -9,7 +9,15 @@ CYBER_URL := https://raw.githubusercontent.com/Noksa/install-scripts/main/cyberp
 
 # Project metadata
 VERSION := $(shell grep 'version:' plugin.yaml | cut -d '"' -f 2)
+COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+DATE    := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 GO_VERSION := $(shell go version | cut -d ' ' -f 3)
+
+# Linker flags for build info
+LDFLAGS := -s -w \
+  -X github.com/noksa/helm-in-pod/cmd.version=$(VERSION) \
+  -X github.com/noksa/helm-in-pod/cmd.commit=$(COMMIT) \
+  -X github.com/noksa/helm-in-pod/cmd.date=$(DATE)
 
 # Go binary paths
 ifeq (,$(shell go env GOBIN))
@@ -171,7 +179,7 @@ test-all: test-unit test-e2e ## Run all tests (unit + e2e)
 .PHONY: build
 build: $(CYBER_CACHE) ## Build binary for current platform
 	@source $(CYBER_CACHE) && cyber_log "Building binary"
-	@go build -o bin/in-pod main.go
+	@go build -ldflags '$(LDFLAGS)' -o bin/in-pod main.go
 	@source $(CYBER_CACHE) && cyber_ok "Binary: $${CYBER_G}bin/in-pod$${CYBER_X}"
 
 .PHONY: binaries

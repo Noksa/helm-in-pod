@@ -22,7 +22,8 @@ func newRootCmd() *cobra.Command {
 	rootCmd.AddCommand(
 		newExecCmd(),
 		newPurgeCmd(),
-		newDaemonCmd())
+		newDaemonCmd(),
+		newVersionCmd())
 
 	startTime := time.Now()
 	var debug bool
@@ -34,16 +35,17 @@ func newRootCmd() *cobra.Command {
 			logz.Host().Info().Msg("Setting log level to debug")
 			zerolog.SetGlobalLevel(zerolog.DebugLevel)
 		}
-		if !helpers.IsCompletionCmd(cmd) {
-			logz.Host().Info().Msgf("Running %v command", color.CyanString(cmd.Name()))
+		if helpers.IsCompletionCmd(cmd) || cmd.Name() == "version" {
+			return nil
 		}
+		logz.Host().Info().Msgf("Running %v command", color.CyanString(cmd.Name()))
 		if err := internal.InitManagers(); err != nil {
 			return fmt.Errorf("could not initialize Kubernetes client: %w", err)
 		}
 		return nil
 	}
 	rootCmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
-		if !helpers.IsCompletionCmd(cmd) {
+		if !helpers.IsCompletionCmd(cmd) && cmd.Name() != "version" {
 			logz.Host().Info().Msgf("%v command took %v", color.CyanString(cmd.Name()), color.GreenString("%v", time.Since(startTime).Round(time.Millisecond)))
 		}
 		return nil

@@ -10,6 +10,9 @@ mkdir -p "${PROJECT_DIR}/generated"
 cd "${PROJECT_DIR}/generated"
 
 version="$(grep "version" "${PROJECT_DIR}/plugin.yaml" | cut -d '"' -f 2)"
+commit="$(git -C "${PROJECT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+build_date="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+ldflags="-s -w -X github.com/noksa/helm-in-pod/cmd.version=${version} -X github.com/noksa/helm-in-pod/cmd.commit=${commit} -X github.com/noksa/helm-in-pod/cmd.date=${build_date}"
 cyber_log "Version: ${CYBER_G}${version}${CYBER_X}"
 
 TAR="tar"
@@ -34,7 +37,7 @@ for A in $ALL_ARCH; do
     fi
     
     cyber_log "Building ${CYBER_C}${O}/${A}${CYBER_X}"
-    CGO_ENABLED=0 GOARCH=$A GOOS=$O go build -o "${output}" "${PROJECT_DIR}/main.go"
+    CGO_ENABLED=0 GOARCH=$A GOOS=$O go build -ldflags "${ldflags}" -o "${output}" "${PROJECT_DIR}/main.go"
     
     archive="helm-in-pod_${version}_${O}_${A}.tar.gz"
     $TAR -czf "${archive}" "${output}"

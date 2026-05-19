@@ -6,7 +6,11 @@ source "$(dirname "$(realpath "$0")")/common.sh"
 cyber_step "Install Plugin Locally"
 
 cyber_log "Building binary"
-go build -o bin/in-pod main.go
+version="$(grep "version" "${PROJECT_DIR}/plugin.yaml" | cut -d '"' -f 2)"
+commit="$(git -C "${PROJECT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+build_date="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+ldflags="-s -w -X github.com/noksa/helm-in-pod/cmd.version=${version} -X github.com/noksa/helm-in-pod/cmd.commit=${commit} -X github.com/noksa/helm-in-pod/cmd.date=${build_date}"
+go build -ldflags "${ldflags}" -o bin/in-pod main.go
 
 cyber_log "Uninstalling existing plugin"
 helm plugin uninstall in-pod 2>/dev/null || true
