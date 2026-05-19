@@ -85,6 +85,11 @@ func newDaemonExecCmd() *cobra.Command {
 				}
 			}
 
+			// Load environment variables from files
+			if err := opts.ParseEnvFiles(); err != nil {
+				return err
+			}
+
 			cmdToUse := strings.Join(args, " ")
 			timeout := viper.GetDuration("timeout")
 			if timeout == 0 {
@@ -101,14 +106,22 @@ func newDaemonExecCmd() *cobra.Command {
 					}
 					return parseErr
 				}
+				var copyErrors []error
 				for podPath, hostPath := range copyFromMap {
 					expanded, expandErr := expand(hostPath)
 					if expandErr != nil {
-						return expandErr
+						copyErrors = append(copyErrors, expandErr)
+						continue
 					}
 					if copyErr := internal.Pod().CopyFileFromPod(pod, podPath, expanded, opts.CopyAttempts); copyErr != nil {
-						return copyErr
+						copyErrors = append(copyErrors, copyErr)
 					}
+				}
+				if len(copyErrors) > 0 {
+					if execErr != nil {
+						return execErr
+					}
+					return copyErrors[0]
 				}
 			}
 

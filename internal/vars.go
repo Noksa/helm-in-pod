@@ -8,6 +8,7 @@ import (
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/hipns"
 	"github.com/noksa/helm-in-pod/internal/hippod"
 )
@@ -38,6 +39,10 @@ func InitManagers() error {
 	}
 
 	operatorkclient.SetDefaultConfig(config)
+
+	if ns := os.Getenv(hipconsts.EnvNamespace); ns != "" {
+		hipconsts.Namespace = ns
+	}
 
 	hostname, _ := os.Hostname()
 	ctx := context.Background()

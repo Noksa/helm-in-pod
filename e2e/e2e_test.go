@@ -5,13 +5,45 @@ package e2e
 import (
 	"fmt"
 	"math/rand/v2"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
+
+// reportsDir is where diagnostic files are written on test failure.
+// Override with E2E_REPORTS_DIR env var; defaults to "e2e-reports".
+func reportsDir() string {
+	if d := os.Getenv("E2E_REPORTS_DIR"); d != "" {
+		return d
+	}
+	return "e2e-reports"
+}
+
+// safeFilename converts a test name into a safe file system name.
+var unsafeChars = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+
+func safeFilename(s string) string {
+	s = unsafeChars.ReplaceAllString(s, "_")
+	if len(s) > 120 {
+		s = s[:120]
+	}
+	return s
+}
+
+// runDiagnostic runs a command purely for diagnostic output — no GinkgoWriter printing.
+func runDiagnostic(cmd *exec.Cmd) string {
+	dir, _ := GetProjectDir()
+	cmd.Dir = dir
+	cmd.Env = os.Environ()
+	output, _ := cmd.CombinedOutput()
+	return string(output)
+}
 
 // randomString generates a random string of given length
 func randomString(length int) string {
@@ -55,26 +87,35 @@ func deleteNamespace(ns string) {
 	_, _ = Run(cmd)
 }
 
-// logOnFailure prints relevant logs when a test fails.
-// Always call this BEFORE deleting namespaces or stopping daemons so pods still exist.
+// logOnFailure writes diagnostic information to a file when a test fails.
+// Call this BEFORE deleting namespaces or stopping daemons so pods still exist.
+// A short pointer to the file is printed to GinkgoWriter; the full output
+// (kubectl get/describe) stays out of the console to keep CI logs readable.
 func logOnFailure(ns string) {
 	if !CurrentSpecReport().Failed() {
 		return
 	}
-	for _, namespace := range []string{ns, hipconsts.HelmInPodNamespace} {
+
+	dir := reportsDir()
+	_ = os.MkdirAll(dir, 0o755)
+	name := safeFilename(CurrentSpecReport().FullText())
+	reportPath := filepath.Join(dir, name+".txt")
+
+	var buf strings.Builder
+	for _, namespace := range []string{ns, hipconsts.Namespace} {
 		if namespace == "" {
 			continue
 		}
-		GinkgoWriter.Printf("\n=== Pods in namespace %s ===\n", namespace)
-		cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-o", "wide")
-		output, _ := Run(cmd)
-		GinkgoWriter.Printf("%s\n", output)
-
-		// describe all pods to get events and status
-		cmd = exec.Command("kubectl", "describe", "pods", "-n", namespace)
-		output, _ = Run(cmd)
-		GinkgoWriter.Printf("\n=== Describe pods in %s ===\n%s\n", namespace, output)
+		fmt.Fprintf(&buf, "\n=== kubectl get pods -n %s ===\n", namespace)
+		buf.WriteString(runDiagnostic(exec.Command("kubectl", "get", "pods", "-n", namespace, "-o", "wide")))
+		fmt.Fprintf(&buf, "\n=== kubectl describe pods -n %s ===\n", namespace)
+		buf.WriteString(runDiagnostic(exec.Command("kubectl", "describe", "pods", "-n", namespace)))
+		fmt.Fprintf(&buf, "\n=== kubectl get events -n %s ===\n", namespace)
+		buf.WriteString(runDiagnostic(exec.Command("kubectl", "get", "events", "-n", namespace, "--sort-by=.lastTimestamp")))
 	}
+
+	_ = os.WriteFile(reportPath, []byte(buf.String()), 0o644)
+	GinkgoWriter.Printf("\n[DIAGNOSTICS] → %s\n", reportPath)
 }
 
 // createTestChart creates a minimal test chart in a temporary directory

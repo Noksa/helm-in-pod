@@ -177,6 +177,34 @@ var _ = Describe("DeleteHelmPods Label Selector Logic", func() {
 		})
 	})
 
+	Context("keep-pod label", func() {
+		It("should produce a non-empty kept-pod selector for the hostname", func() {
+			keptSelector := fmt.Sprintf("host=%v,%v=true", hostname, hipconsts.LabelKept)
+			Expect(keptSelector).To(ContainSubstring("host=test-host"))
+			Expect(keptSelector).To(ContainSubstring(hipconsts.LabelKept + "=true"))
+		})
+
+		It("should use a kept-pod selector that is disjoint from the per-invocation selector", func() {
+			invSelector := buildLabelSelector(hostname, "inv-abc", cmdoptions.ExecOptions{}, false)
+			keptSelector := fmt.Sprintf("host=%v,%v=true", hostname, hipconsts.LabelKept)
+
+			// The two selectors select different sets of pods — one by invocation ID,
+			// one by the kept label — so they must not be equal.
+			Expect(invSelector).NotTo(Equal(keptSelector))
+			Expect(keptSelector).NotTo(ContainSubstring("operation-id"))
+			Expect(invSelector).NotTo(ContainSubstring(hipconsts.LabelKept))
+		})
+
+		It("should scope kept-pod selector to hostname to avoid cross-host deletion", func() {
+			keptSelector1 := fmt.Sprintf("host=%v,%v=true", "host-a", hipconsts.LabelKept)
+			keptSelector2 := fmt.Sprintf("host=%v,%v=true", "host-b", hipconsts.LabelKept)
+
+			Expect(keptSelector1).NotTo(Equal(keptSelector2))
+			Expect(keptSelector1).To(ContainSubstring("host=host-a"))
+			Expect(keptSelector2).To(ContainSubstring("host=host-b"))
+		})
+	})
+
 	Context("when working with daemon pods", func() {
 		It("should include custom labels in daemon pod creation", func() {
 			daemonOpts := cmdoptions.DaemonOptions{

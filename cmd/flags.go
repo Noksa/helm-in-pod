@@ -95,22 +95,31 @@ func addPodCreationFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions) {
 	cmd.Flags().StringToStringVar(&opts.NodeSelector, "node-selector", map[string]string{}, "Pod node selectors. Examples: 'node-role.kubernetes.io/control-plane=\"\"', 'disktype=ssd'")
 	cmd.Flags().StringVar(&opts.ImagePullSecret, "image-pull-secret", "", "Image pull secret for pulling from a private registry")
 	cmd.Flags().StringVar(&opts.PullPolicy, "pull-policy", "IfNotPresent", "Image pull policy for the pod")
-	cmd.Flags().StringVarP(&opts.Image, "image", "i", "docker.io/noksa/kubectl-helm:v1.34.5-v4.1.1", "Docker image to use for the pod")
+	defaultImage := "docker.io/noksa/kubectl-helm:v1.34.5-v4.1.1"
+	if img := os.Getenv(hipconsts.EnvImage); img != "" {
+		defaultImage = img
+	}
+	cmd.Flags().StringVarP(&opts.Image, "image", "i", defaultImage, "Docker image to use for the pod (env: "+hipconsts.EnvImage+")")
 	cmd.Flags().StringSliceVar(&opts.Volumes, "volume", []string{}, "Mount volumes in the pod. Format: type:name:mountPath[:ro]. Types: pvc, secret, configmap, hostpath. Examples: 'pvc:my-claim:/data', 'secret:my-secret:/etc/creds:ro', 'configmap:my-cm:/etc/config', 'hostpath:/var/log:/host-logs:ro'")
 	cmd.Flags().StringVar(&opts.ServiceAccount, "service-account", "", "Service account to use in the pod (default: helm-in-pod)")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Print the pod spec as YAML without creating the pod")
 	cmd.Flags().Int64Var(&opts.ActiveDeadlineSeconds, "active-deadline-seconds", 0, "Maximum duration in seconds the pod is allowed to run. The pod will be terminated by Kubernetes once this deadline is exceeded, regardless of whether the client is still connected. Useful to avoid orphaned pods in CI/CD pipelines. 0 means no deadline (default)")
+	cmd.Flags().BoolVar(&opts.Privileged, "privileged", false, "Run the pod container in privileged mode (grants root-equivalent access to the host kernel)")
+	cmd.Flags().DurationVar(&opts.StartupTimeout, "startup-timeout", 0, "How long to wait for the pod to become ready before giving up (default: 5m). Increase this on clusters with slow image registries")
+	cmd.Flags().BoolVar(&opts.KeepPod, "keep-pod", false, "Keep the pod alive after exec completes (for debugging). The pod is removed on the next exec or purge run")
 }
 
 func addRuntimeFlags(cmd *cobra.Command, opts *cmdoptions.ExecOptions, copyRepoDefault bool) {
 	cmd.Flags().StringToStringVarP(&opts.Env, "env", "e", map[string]string{}, "Environment variables to set in the pod before running the command")
 	cmd.Flags().StringSliceVarP(&opts.SubstEnv, "subst-env", "s", []string{}, "Forward environment variables from the host to the pod by name (values are resolved from the host). Example: -s HELM_DRIVER,HELM_DRIVER_SQL_CONNECTION_STRING")
+	cmd.Flags().StringSliceVar(&opts.EnvFiles, "env-file", []string{}, "Read environment variables from a file (KEY=VALUE format, supports comments and quotes). Repeatable. Explicit --env flags take precedence")
 	cmd.Flags().BoolVar(&opts.CopyRepo, "copy-repo", copyRepoDefault, "Copy Helm repositories from the host to the pod")
 	cmd.Flags().StringSliceVar(&opts.UpdateRepo, "update-repo", []string{}, "Helm repository aliases to update in the pod after copying. Requires --copy-repo. If specified without values, all repositories are updated")
 	cmd.Flags().StringSliceVarP(&opts.Files, "copy", "c", []string{}, "Copy files/directories from host to pod. Format: /host/path:/pod/path. Repeatable")
 	cmd.Flags().IntVar(&opts.CopyAttempts, "copy-attempts", 3, "Retry count for file copy operations (default: 3)")
 	cmd.Flags().IntVar(&opts.UpdateRepoAttempts, "update-repo-attempts", 3, "Retry count for Helm repo update operations (default: 3)")
 	cmd.Flags().StringSliceVar(&opts.CopyFrom, "copy-from", []string{}, "Copy files/directories from pod to host after execution. Format: /pod/path:/host/path. Repeatable")
+	cmd.Flags().BoolVarP(&opts.SuppressSecrets, "suppress-secrets", "q", false, "Mask values of --set, --set-string, --set-file, --set-json flags in log output")
 }
 
 // parseCopyFromMappings parses --copy-from flag values into a map of pod_path -> host_path.

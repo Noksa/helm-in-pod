@@ -63,7 +63,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	}
 
 	By("creating helm-in-pod namespace for executor pods")
-	cmd = exec.Command("kubectl", "create", "namespace", hipconsts.HelmInPodNamespace, "--dry-run=client", "-o", "yaml")
+	cmd = exec.Command("kubectl", "create", "namespace", hipconsts.Namespace, "--dry-run=client", "-o", "yaml")
 	output, _ = Run(cmd)
 	cmd = exec.Command("kubectl", "apply", "-f", "-")
 	cmd.Stdin = strings.NewReader(output)
@@ -94,7 +94,7 @@ var _ = SynchronizedAfterSuite(func() {
 }, func() {
 	// This runs ONLY on process 1 after all other processes finish
 	By("cleaning up helm-in-pod namespace")
-	cmd := exec.Command("kubectl", "delete", "namespace", hipconsts.HelmInPodNamespace, "--ignore-not-found", "--wait=false")
+	cmd := exec.Command("kubectl", "delete", "namespace", hipconsts.Namespace, "--ignore-not-found", "--wait=false")
 	_, _ = Run(cmd)
 
 	By("uninstalling helm plugin")

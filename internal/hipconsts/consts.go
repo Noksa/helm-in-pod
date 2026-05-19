@@ -1,16 +1,28 @@
 package hipconsts
 
+// Namespace is the single source of truth for the Kubernetes namespace used
+// by the plugin. Set at startup from HELM_IN_POD_NAMESPACE; defaults to
+// "helm-in-pod". Both hippod and hipns read this var directly.
+var Namespace = "helm-in-pod"
+
+// ContainerName is the fixed name given to the single container inside every
+// plugin pod. It is always "helm-in-pod" regardless of the active Namespace
+// so that ExecInPod calls stay correct when HELM_IN_POD_NAMESPACE is set.
+const ContainerName = "helm-in-pod"
+
 const (
-	HelmInPodNamespace           = "helm-in-pod"
 	AnnotationHomeDirectory      = "helm-in-pod/home-directory"
 	AnnotationHelmFound          = "helm-in-pod/helm-found"
 	AnnotationHelm4              = "helm-in-pod/helm4"
 	AnnotationLastRepoUpdateTime = "helm-in-pod/last-repo-update-time"
 
 	EnvDaemonName = "HELM_IN_POD_DAEMON_NAME"
+	EnvImage      = "HELM_IN_POD_IMAGE"
+	EnvNamespace  = "HELM_IN_POD_NAMESPACE"
 
 	LabelOperationID = "helm-in-pod/operation-id"
 	LabelManagedBy   = "app.kubernetes.io/managed-by"
+	LabelKept        = "helm-in-pod/kept"
 
 	// Sentinel files for copy-from flow
 	CopyFromDoneFile = "/tmp/copy-done"

@@ -40,6 +40,11 @@ type ExecOptions struct {
 	DryRun                bool
 	CopyFrom              []string
 	ActiveDeadlineSeconds int64
+	SuppressSecrets       bool
+	EnvFiles              []string
+	Privileged            bool
+	StartupTimeout        time.Duration
+	KeepPod               bool
 }
 
 // ParseFileMappings parses the Files slice into FilesAsMap.

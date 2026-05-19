@@ -53,35 +53,117 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  plugin-package:
+    name: Package & Sign Plugin
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Compute release metadata
+        id: meta
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          if [[ "$version" =~ -(alpha|beta|rc) ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Helm 4
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v4.1.4'
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@v1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package and sign plugin
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          SIGNING_KEY_EMAIL: ${{ vars.SIGNING_KEY_EMAIL }}
+          GPG_KEYRING_BASE64: ${{ secrets.GPG_KEYRING_BASE64 }}
+        run: |
+          mkdir -p plugin-staging/scripts
+          cp plugin.yaml plugin-staging/
+          cp scripts/install.sh plugin-staging/scripts/
+          sed -i "s/^version:.*/version: \"${VERSION}\"/" plugin-staging/plugin.yaml
+          printf '%s' "$GPG_KEYRING_BASE64" | base64 -d > secring.gpg
+          helm plugin package --sign --key "$SIGNING_KEY_EMAIL" --keyring secring.gpg plugin-staging
+          rm -f secring.gpg
+          ls -la "in-pod-${VERSION}.tgz" "in-pod-${VERSION}.tgz.prov"
+
+      - name: Push to OCI registry
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          IS_PRERELEASE: ${{ steps.meta.outputs.is_prerelease }}
+        run: |
+          PACKAGE="in-pod-${VERSION}.tgz"
+          REPO="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/helm-in-pod/in-pod"
+          oras push "${REPO}:${VERSION}" \
+            --artifact-type application/vnd.helm.plugin.v1+json \
+            "$PACKAGE" \
+            "$PACKAGE.prov"
+          if [ "$IS_PRERELEASE" = "false" ]; then
+            oras tag "${REPO}:${VERSION}" latest
+          fi
+
+      - name: Upload plugin tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-package
+          path: |
+            in-pod-*.tgz
+            in-pod-*.tgz.prov
+          if-no-files-found: error
+          retention-days: 1
+
   release:
     name: Create Release
-    needs: build
+    needs: [build, plugin-package]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download all artifacts
+      - name: Download binary artifacts
         uses: actions/download-artifact@v4
         with:
           path: generated
           pattern: binary-*
           merge-multiple: true
 
+      - name: Download plugin package
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-package
+          path: generated
+
       - name: Verify archives
         run: |
-          count=$(ls generated/*.tar.gz 2>/dev/null | wc -l)
-          if [ "$count" -eq 0 ]; then
-            echo "No archives found in generated/"
-            exit 1
-          fi
-          echo "Found $count release archives:"
-          ls -lh generated/*.tar.gz
+          echo "Release archives:"
+          ls -lh generated/*.tar.gz generated/*.tgz generated/*.prov 2>/dev/null
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: generated/*.tar.gz
-          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') || contains(github.ref, 'rc') }}
+          files: |
+            generated/*.tar.gz
+            generated/*.tgz
+            generated/*.prov
+          prerelease: ${{ needs.plugin-package.outputs.is_prerelease == 'true' }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

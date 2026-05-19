@@ -1,17 +1,19 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
-	"strings"
+	"os"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"helm.sh/helm/v4/pkg/cli"
 
 	"github.com/noksa/helm-in-pod/internal"
 	"github.com/noksa/helm-in-pod/internal/cmdoptions"
-	"github.com/noksa/helm-in-pod/internal/helpers"
+	"github.com/noksa/helm-in-pod/internal/helmtar"
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
 	"github.com/noksa/helm-in-pod/internal/logz"
 )
@@ -58,6 +60,11 @@ Use 'daemon exec' to run commands and 'daemon stop' to tear down the pod.`,
 
 			opts.ParseFileMappings()
 
+			// Load environment variables from files
+			if err := opts.ParseEnvFiles(); err != nil {
+				return err
+			}
+
 			err = internal.Namespace().PrepareNs()
 			if err != nil {
 				return err
@@ -68,44 +75,52 @@ Use 'daemon exec' to run commands and 'daemon stop' to tear down the pod.`,
 				return err
 			}
 
-			userInfo, err := internal.Pod().GetPodUserInfo(pod)
+			// Build bundle: user files + repositories.yaml (if applicable).
+			// CopyFilesBundleWithBootInfo collects home dir, user, and helm version in
+			// the same exec call, replacing the separate GetPodUserInfo + IsHelm4 round trips.
+			bundle := make([]helmtar.BundleEntry, 0, len(opts.FilesAsMap)+1)
+			for src, dest := range opts.FilesAsMap {
+				expandedSrc, expandErr := expand(src)
+				if expandErr != nil {
+					return expandErr
+				}
+				bundle = append(bundle, helmtar.BundleEntry{SrcPath: expandedSrc, DestPath: dest})
+			}
+
+			repoConfigStaged := false
+			if opts.CopyRepo {
+				settings := cli.New()
+				_, statErr := os.Stat(settings.RepositoryConfig)
+				if statErr == nil {
+					bundle = append(bundle, helmtar.BundleEntry{SrcPath: settings.RepositoryConfig, DestPath: hipconsts.StagedRepoConfigPath})
+					repoConfigStaged = true
+				} else if !errors.Is(statErr, os.ErrNotExist) {
+					return statErr
+				}
+			}
+
+			bootInfo, err := internal.Pod().CopyFilesBundleWithBootInfo(pod, bundle, nil, opts.CopyAttempts, repoConfigStaged)
 			if err != nil {
 				return err
 			}
 
-			helmFound := false
-			isHelm4, err := helpers.IsHelm4(pod.Name, pod.Namespace, opts.Image)
-			if err != nil {
-				if !strings.Contains(err.Error(), "helm is not installed") {
-					return err
-				}
-			} else {
-				helmFound = true
-			}
-
-			if !helmFound {
+			if !bootInfo.HelmFound {
 				logz.Pod().Warn().Msg("helm is not installed in the image, all helm prerequisites will be skipped")
 			}
 
-			if opts.CopyRepo && helmFound {
-				err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, userInfo.HomeDirectory, isHelm4, false)
+			if opts.CopyRepo && bootInfo.HelmFound && repoConfigStaged {
+				err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, bootInfo.HomeDirectory, bootInfo.IsHelm4, true)
 				if err != nil {
 					return err
 				}
 			}
 
-			err = internal.Pod().CopyUserFiles(pod, opts.ExecOptions, expand, nil)
-			if err != nil {
-				return err
-			}
-
-			// Annotate pod with user info and helm version
 			annotations := map[string]string{
-				hipconsts.AnnotationHomeDirectory: userInfo.HomeDirectory,
-				hipconsts.AnnotationHelmFound:     fmt.Sprintf("%v", helmFound),
+				hipconsts.AnnotationHomeDirectory: bootInfo.HomeDirectory,
+				hipconsts.AnnotationHelmFound:     fmt.Sprintf("%v", bootInfo.HelmFound),
 			}
-			if helmFound {
-				annotations[hipconsts.AnnotationHelm4] = fmt.Sprintf("%v", isHelm4)
+			if bootInfo.HelmFound {
+				annotations[hipconsts.AnnotationHelm4] = fmt.Sprintf("%v", bootInfo.IsHelm4)
 			}
 			err = internal.Pod().AnnotatePod(pod, annotations)
 			if err != nil {

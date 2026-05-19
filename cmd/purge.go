@@ -17,9 +17,16 @@ func newPurgeCmd() *cobra.Command {
 	opts := cmdoptions.PurgeOptions{}
 	purgeCmd.Flags().BoolVar(&opts.All, "all", false, "Remove all pods in the helm-in-pod namespace (regardless of host), associated PDBs, and the ClusterRoleBinding")
 	purgeCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if opts.All {
+			return errors.Join(
+				internal.Namespace().DeleteClusterRoleBinding(),
+				internal.Pod().DeleteHelmPods(cmdoptions.ExecOptions{}, opts),
+			)
+		}
 		return errors.Join(
 			internal.Namespace().DeleteClusterRoleBinding(),
 			internal.Pod().DeleteHelmPods(cmdoptions.ExecOptions{}, opts),
+			internal.Pod().DeleteKeptPods(),
 		)
 	}
 	return purgeCmd

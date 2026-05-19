@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -198,6 +199,162 @@ var _ = Describe("Environment Variable Flags", func() {
 			output, exitCode := RunWithExitCode(cmd)
 			Expect(exitCode).To(Equal(0), "output: %s", output)
 			Expect(strings.TrimSpace(output)).To(ContainSubstring("daemon-host-val"))
+		})
+	})
+
+	Context("--env-file flag", func() {
+		var tmpDir string
+
+		BeforeEach(func() {
+			tmpDir = GinkgoT().TempDir()
+		})
+
+		It("should load env vars from a file into the pod", func() {
+			envFile := filepath.Join(tmpDir, "test.env")
+			Expect(os.WriteFile(envFile, []byte("FILE_VAR=loaded-from-file\n"), 0644)).To(Succeed())
+
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--env-file", envFile,
+				"--", "sh -c 'echo $FILE_VAR'",
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			Expect(output).To(ContainSubstring("loaded-from-file"))
+		})
+
+		It("should load multiple files when --env-file is repeated", func() {
+			file1 := filepath.Join(tmpDir, "a.env")
+			file2 := filepath.Join(tmpDir, "b.env")
+			Expect(os.WriteFile(file1, []byte("VAR_A=alpha\n"), 0644)).To(Succeed())
+			Expect(os.WriteFile(file2, []byte("VAR_B=beta\n"), 0644)).To(Succeed())
+
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--env-file", file1,
+				"--env-file", file2,
+				"--", "sh -c 'echo ${VAR_A}-${VAR_B}'",
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			Expect(output).To(ContainSubstring("alpha-beta"))
+		})
+
+		It("should give explicit --env priority over --env-file for the same key", func() {
+			envFile := filepath.Join(tmpDir, "base.env")
+			Expect(os.WriteFile(envFile, []byte("PRIORITY_VAR=from-file\n"), 0644)).To(Succeed())
+
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--env-file", envFile,
+				"--env", "PRIORITY_VAR=from-flag",
+				"--", "sh -c 'echo $PRIORITY_VAR'",
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			// explicit --env wins
+			Expect(output).To(ContainSubstring("from-flag"))
+			Expect(output).NotTo(ContainSubstring("from-file"))
+		})
+
+		It("should support comments and quoted values in the env file", func() {
+			envFile := filepath.Join(tmpDir, "complex.env")
+			content := "# this is a comment\nQUOTED_VAR=\"hello world\"\nUNQUOTED=simple\n"
+			Expect(os.WriteFile(envFile, []byte(content), 0644)).To(Succeed())
+
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--env-file", envFile,
+				"--", "sh -c 'echo \"${QUOTED_VAR}|${UNQUOTED}\"'",
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			Expect(output).To(ContainSubstring("hello world|simple"))
+		})
+
+		It("should load env-file vars in daemon exec mode", func() {
+			daemonName := fmt.Sprintf("envfile-d-%s", randomString(6))
+			startCmd := BuildDaemonStartCommand("--name", daemonName, "--labels", testLabel, "-n", testNS)
+			_, err := Run(startCmd)
+			Expect(err).NotTo(HaveOccurred())
+			DeferCleanup(func() {
+				exec.Command("helm", "in-pod", "daemon", "stop", "--name", daemonName, "-n", testNS).Run()
+			})
+
+			envFile := filepath.Join(tmpDir, "daemon.env")
+			Expect(os.WriteFile(envFile, []byte("DAEMON_FILE_VAR=daemon-loaded\n"), 0644)).To(Succeed())
+
+			execCmd := exec.Command("helm", "in-pod", "daemon", "exec",
+				"--name", daemonName, "-n", testNS,
+				"--env-file", envFile,
+				"--", "printenv DAEMON_FILE_VAR")
+			output, exitCode := RunWithExitCode(execCmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			Expect(output).To(ContainSubstring("daemon-loaded"))
+		})
+	})
+
+	Context("--suppress-secrets flag", func() {
+		It("should mask --set values in the plugin log when flag is set", func() {
+			// The command uses --set (as part of a helm call that ignores it gracefully).
+			// With --suppress-secrets the plugin's own "Running '...' command" log line
+			// must show *** instead of the secret value.
+			// Using `sh -c "echo done" --set password=topsecret` — sh ignores the
+			// extra positional args after the command string, so exit code is 0 and
+			// the echo output "done" does not contain the secret.
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--suppress-secrets",
+				"--", `sh -c "echo done" --set password=topsecret`,
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			Expect(output).To(ContainSubstring("***"))
+			Expect(output).NotTo(ContainSubstring("topsecret"))
+		})
+
+		It("should show --set values in the log when flag is not set", func() {
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--", `sh -c "echo done" --set password=visiblesecret`,
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			Expect(output).To(ContainSubstring("visiblesecret"))
+			Expect(output).NotTo(ContainSubstring("***"))
+		})
+
+		It("should mask multiple --set flags", func() {
+			cmd := BuildHelmInPodCommand(
+				"--labels", testLabel,
+				"--suppress-secrets",
+				"--", `sh -c "echo done" --set key1=secret1 --set-string key2=secret2`,
+			)
+			output, exitCode := RunWithExitCode(cmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			Expect(output).NotTo(ContainSubstring("secret1"))
+			Expect(output).NotTo(ContainSubstring("secret2"))
+			// Both flags should produce ***
+			Expect(strings.Count(output, "***")).To(BeNumerically(">=", 2))
+		})
+
+		It("should mask --set values in daemon exec log", func() {
+			daemonName := fmt.Sprintf("suppress-d-%s", randomString(6))
+			startCmd := BuildDaemonStartCommand("--name", daemonName, "--labels", testLabel, "-n", testNS)
+			_, err := Run(startCmd)
+			Expect(err).NotTo(HaveOccurred())
+			DeferCleanup(func() {
+				exec.Command("helm", "in-pod", "daemon", "stop", "--name", daemonName, "-n", testNS).Run()
+			})
+
+			execCmd := exec.Command("helm", "in-pod", "daemon", "exec",
+				"--name", daemonName, "-n", testNS,
+				"--suppress-secrets",
+				"--", `sh -c "echo done" --set db_password=daemon_secret`)
+			output, exitCode := RunWithExitCode(execCmd)
+			Expect(exitCode).To(Equal(0), "output: %s", output)
+			Expect(output).To(ContainSubstring("***"))
+			Expect(output).NotTo(ContainSubstring("daemon_secret"))
 		})
 	})
 })

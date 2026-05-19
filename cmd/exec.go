@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -57,7 +58,25 @@ The pod is deleted after the command completes, even on failure.`,
 		}
 
 		defer func() {
-			cleanupErr := internal.Pod().DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
+			// On signal interrupt, CreateHelmPod's signal handler already deleted
+			// the pod — skip the redundant call. On timeout or normal exit, run
+			// cleanup; if the command context is dead (timeout), use a fresh
+			// background context so the API call doesn't fail with "context canceled".
+			if errors.Is(cmd.Context().Err(), context.Canceled) {
+				return
+			}
+			// --keep-pod: leave the pod alive so the user can inspect it.
+			// The pod is removed on the next exec or purge run.
+			if opts.KeepPod {
+				return
+			}
+			pod := internal.Pod()
+			if cmd.Context().Err() != nil {
+				cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				pod = pod.WithContext(cleanupCtx)
+			}
+			cleanupErr := pod.DeleteHelmPods(opts, cmdoptions.PurgeOptions{All: false})
 			if cleanupErr != nil && returnErr == nil {
 				returnErr = cleanupErr
 			}
@@ -65,6 +84,11 @@ The pod is deleted after the command completes, even on failure.`,
 
 		// Parse file mappings
 		opts.ParseFileMappings()
+
+		// Load environment variables from files
+		if err := opts.ParseEnvFiles(); err != nil {
+			return err
+		}
 
 		// Prepare namespace and create pod
 		err := internal.Namespace().PrepareNs()
@@ -76,11 +100,14 @@ The pod is deleted after the command completes, even on failure.`,
 		if err != nil {
 			return err
 		}
+		if opts.KeepPod {
+			logz.Host().Info().Msgf("Pod %v will be kept after exec — inspect with: kubectl exec -n %v %v -- sh", pod.Name, pod.Namespace, pod.Name)
+		}
 
 		cmdToUse := strings.Join(args, " ")
 
 		// Generate the wrapped script
-		tempScriptFile, err := os.CreateTemp("", hipconsts.HelmInPodNamespace)
+		tempScriptFile, err := os.CreateTemp("", hipconsts.Namespace)
 		if err != nil {
 			return err
 		}

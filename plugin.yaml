@@ -1,10 +1,19 @@
-name: "in-pod"
-version: "0.8.1"
-usage: "Run any command using privileged pod in a k8s cluster"
-description: "Run any command using privileged pod in a k8s cluster"
-command: "$HELM_PLUGIN_DIR/bin/in-pod"
-useTunnel: false
-ignoreFlags: false
-hooks:
-  install: "cd $HELM_PLUGIN_DIR; ./scripts/install.sh"
-  upgrade: "cd $HELM_PLUGIN_DIR; ./scripts/install.sh"
+apiVersion: v1
+type: cli/v1
+name: in-pod
+version: "0.9.0"
+runtime: subprocess
+sourceURL: https://github.com/Noksa/helm-in-pod
+config:
+  usage: "in-pod [command]"
+  shortHelp: "Run any command using privileged pod in a k8s cluster"
+  longHelp: "Run any command (helm/kubectl/etc) inside a Kubernetes cluster pod to minimize network latency"
+  ignoreFlags: false
+runtimeConfig:
+  platformCommand:
+    - command: "${HELM_PLUGIN_DIR}/bin/in-pod"
+  platformHooks:
+    install:
+      - command: "${HELM_PLUGIN_DIR}/scripts/install.sh"
+    update:
+      - command: "${HELM_PLUGIN_DIR}/scripts/install.sh"

@@ -40,3 +40,9 @@ func HostPod() *zerolog.Logger {
 	})
 	return &hostPodLogger
 }
+
+// Suppress disables all log output globally. Used after a signal interrupt to
+// silence goroutines that are still racing to finish their current log line.
+func Suppress() {
+	zerolog.SetGlobalLevel(zerolog.Disabled)
+}
