@@ -84,20 +84,21 @@ func (m *Manager) CreateClusterRoleBinding() error {
 		if err != nil && client.IgnoreAlreadyExists(err) != nil {
 			return err
 		}
+		return m.waitForClusterRoleBindingEffective()
 	}
-	return m.waitForClusterRoleBindingEffective()
+	return nil
 }
 
 func (m *Manager) waitForClusterRoleBindingEffective() error {
 	cs := operatorkclient.DefaultClient().ClientSet()
 	saUser := "system:serviceaccount:" + hipconsts.Namespace + ":" + hipconsts.Namespace
-	err := wait.PollUntilContextTimeout(m.ctx, time.Second, 2*time.Minute, true, func(ctx context.Context) (bool, error) {
+	err := wait.PollUntilContextTimeout(m.ctx, time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		review := &authorizationv1.SubjectAccessReview{
 			Spec: authorizationv1.SubjectAccessReviewSpec{
 				ResourceAttributes: &authorizationv1.ResourceAttributes{
-					Verb:     "get",
-					Group:    "apps",
-					Resource: "deployments",
+					Verb:      "create",
+					Resource:  "pods",
+					Namespace: hipconsts.Namespace,
 				},
 				User: saUser,
 			},
