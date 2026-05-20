@@ -3,17 +3,21 @@ package hipns
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/Noksa/operator-home/pkg/operatorkclient"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
-	"k8s.io/client-go/kubernetes/fake"
+	fakek8s "k8s.io/client-go/kubernetes/fake"
 	clientruntime "k8s.io/client-go/kubernetes/scheme"
+	ktesting "k8s.io/client-go/testing"
 
 	"github.com/noksa/helm-in-pod/internal/hipconsts"
 )
@@ -23,8 +27,14 @@ func TestHipns(t *testing.T) {
 	RunSpecs(t, "Hipns Suite")
 }
 
-func newTestManager() (*Manager, *fake.Clientset) {
-	cs := fake.NewClientset()
+func newTestManager() (*Manager, *fakek8s.Clientset) {
+	cs := fakek8s.NewClientset()
+	// Ensure SAR checks in waitForClusterRoleBindingEffective always succeed in unit tests
+	cs.PrependReactor("create", "subjectaccessreviews", func(action ktesting.Action) (bool, runtime.Object, error) {
+		return true, &authorizationv1.SubjectAccessReview{
+			Status: authorizationv1.SubjectAccessReviewStatus{Allowed: true},
+		}, nil
+	})
 	dyn := dynamicfake.NewSimpleDynamicClient(clientruntime.Scheme)
 	client := operatorkclient.NewClientFromClientSet(cs, dyn, nil)
 	return &Manager{ctx: context.Background(), kclient: client}, cs
@@ -119,6 +129,28 @@ var _ = Describe("hipns.Manager", func() {
 			crb, err := cs.RbacV1().ClusterRoleBindings().Get(context.Background(), "custom-ns", metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(crb.Subjects[0].Namespace).To(Equal("custom-ns"))
+		})
+
+		It("waits for ClusterRoleBinding to become effective", func() {
+			m, cs := newTestManager()
+
+			Expect(m.PrepareNs()).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				review := &authorizationv1.SubjectAccessReview{
+					Spec: authorizationv1.SubjectAccessReviewSpec{
+						ResourceAttributes: &authorizationv1.ResourceAttributes{
+							Verb:      "create",
+							Resource:  "pods",
+							Namespace: hipconsts.Namespace,
+						},
+						User: "system:serviceaccount:" + hipconsts.Namespace + ":" + hipconsts.Namespace,
+					},
+				}
+				result, err := cs.AuthorizationV1().SubjectAccessReviews().Create(context.Background(), review, metav1.CreateOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(result.Status.Allowed).To(BeTrue())
+			}).WithTimeout(30 * time.Second).Should(Succeed())
 		})
 	})
 

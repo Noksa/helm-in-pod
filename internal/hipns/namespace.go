@@ -98,7 +98,7 @@ func (m *Manager) CreateClusterRoleBinding() error {
 }
 
 func (m *Manager) waitForClusterRoleBindingEffective() error {
-	cs := operatorkclient.DefaultClient().ClientSet()
+	cs := m.client().ClientSet()
 	saUser := "system:serviceaccount:" + hipconsts.Namespace + ":" + hipconsts.Namespace
 	err := wait.PollUntilContextTimeout(m.ctx, time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		review := &authorizationv1.SubjectAccessReview{

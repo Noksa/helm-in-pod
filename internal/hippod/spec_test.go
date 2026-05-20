@@ -348,6 +348,15 @@ var _ = Describe("buildPodSpec", func() {
 			Expect(sc.RunAsUser).NotTo(BeNil())
 			Expect(*sc.RunAsUser).To(Equal(int64(0)))
 		})
+
+		It("should always initialize a non-nil SecurityContext (hardening base)", func() {
+			opts := baseOpts()
+			spec, err := buildPodSpec(opts, false)
+			Expect(err).NotTo(HaveOccurred())
+
+			sc := spec.Containers[0].SecurityContext
+			Expect(sc).NotTo(BeNil())
+		})
 	})
 
 	Context("image configuration", func() {
