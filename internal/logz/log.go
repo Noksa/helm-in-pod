@@ -7,39 +7,23 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-var (
-	hostOnce    sync.Once
-	podOnce     sync.Once
-	hostPodOnce sync.Once
-
-	hostLogger    zerolog.Logger
-	podLogger     zerolog.Logger
-	hostPodLogger zerolog.Logger
-)
-
 // Host returns a reusable zerolog.Logger with source=host field.
-func Host() *zerolog.Logger {
-	hostOnce.Do(func() {
-		hostLogger = log.With().Str("source", "host").Logger()
-	})
-	return &hostLogger
-}
+var Host = sync.OnceValue(func() *zerolog.Logger {
+	l := log.With().Str("source", "host").Logger()
+	return &l
+})
 
 // Pod returns a reusable zerolog.Logger with source=pod field.
-func Pod() *zerolog.Logger {
-	podOnce.Do(func() {
-		podLogger = log.With().Str("source", "pod").Logger()
-	})
-	return &podLogger
-}
+var Pod = sync.OnceValue(func() *zerolog.Logger {
+	l := log.With().Str("source", "pod").Logger()
+	return &l
+})
 
 // HostPod returns a reusable zerolog.Logger with source=host+pod field.
-func HostPod() *zerolog.Logger {
-	hostPodOnce.Do(func() {
-		hostPodLogger = log.With().Str("source", "host+pod").Logger()
-	})
-	return &hostPodLogger
-}
+var HostPod = sync.OnceValue(func() *zerolog.Logger {
+	l := log.With().Str("source", "host+pod").Logger()
+	return &l
+})
 
 // Suppress disables all log output globally. Used after a signal interrupt to
 // silence goroutines that are still racing to finish their current log line.

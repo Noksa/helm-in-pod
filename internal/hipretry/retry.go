@@ -50,7 +50,7 @@ func K8sAPIBackoff(attempts int) BackoffConfig {
 // isPermanentError returns true for errors that should never be retried.
 func isPermanentError(err error) bool {
 	// Kubernetes API permanent errors
-	if apiErr := (*apierrors.StatusError)(nil); stderrors.As(err, &apiErr) {
+	if apiErr, ok := stderrors.AsType[*apierrors.StatusError](err); ok {
 		code := apiErr.ErrStatus.Code
 		switch code {
 		case http.StatusNotFound, http.StatusForbidden, http.StatusUnauthorized, http.StatusUnprocessableEntity:
@@ -107,7 +107,7 @@ func isTransientError(err error) bool {
 	}
 
 	// Kubernetes 429 / 503 / 500 (etcd hints)
-	if apiErr := (*apierrors.StatusError)(nil); stderrors.As(err, &apiErr) {
+	if apiErr, ok := stderrors.AsType[*apierrors.StatusError](err); ok {
 		code := apiErr.ErrStatus.Code
 		if code == http.StatusTooManyRequests ||
 			code == http.StatusServiceUnavailable ||
@@ -170,7 +170,7 @@ func RetryWithBackoff(ctx context.Context, cfg BackoffConfig, maxAttempts int, f
 	}
 
 	var mErr error
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := range maxAttempts {
 		// Check for cancellation before calling fn
 		if ctx.Err() != nil {
 			mErr = multierr.Append(mErr, ctx.Err())

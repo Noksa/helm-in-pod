@@ -308,9 +308,7 @@ var _ = Describe("Active Deadline Seconds Flag", func() {
 			results := make([]result, 3)
 
 			// Pod 0: short deadline (dies)
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				label := generateTestLabel()
 				start := time.Now()
 				cmd := BuildHelmInPodCommand(
@@ -323,12 +321,10 @@ var _ = Describe("Active Deadline Seconds Flag", func() {
 				mu.Lock()
 				results[0] = result{label, code, out, time.Since(start)}
 				mu.Unlock()
-			}()
+			})
 
 			// Pod 1: generous deadline (completes)
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				label := generateTestLabel()
 				start := time.Now()
 				cmd := BuildHelmInPodCommand(
@@ -340,12 +336,10 @@ var _ = Describe("Active Deadline Seconds Flag", func() {
 				mu.Lock()
 				results[1] = result{label, code, out, time.Since(start)}
 				mu.Unlock()
-			}()
+			})
 
 			// Pod 2: no deadline (completes normally)
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				label := generateTestLabel()
 				start := time.Now()
 				cmd := BuildHelmInPodCommand(
@@ -356,7 +350,7 @@ var _ = Describe("Active Deadline Seconds Flag", func() {
 				mu.Lock()
 				results[2] = result{label, code, out, time.Since(start)}
 				mu.Unlock()
-			}()
+			})
 
 			wg.Wait()
 
@@ -479,7 +473,7 @@ var _ = Describe("Active Deadline Seconds Flag", func() {
 		})
 
 		It("should apply activeDeadlineSeconds to each exec pod independently when run sequentially", func() {
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				lbl := generateTestLabel()
 				cmd := BuildHelmInPodCommand(
 					"--labels", lbl,

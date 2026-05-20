@@ -64,11 +64,11 @@ var _ = Describe("PodDisruptionBudget", func() {
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			var pdbList map[string]interface{}
+			var pdbList map[string]any
 			err = json.Unmarshal([]byte(output), &pdbList)
 			Expect(err).NotTo(HaveOccurred())
 
-			items := pdbList["items"].([]interface{})
+			items := pdbList["items"].([]any)
 			// After command completion, PDB for our pod should be cleaned up
 			Expect(items).To(BeEmpty(), "PDB should be cleaned up after pod deletion")
 		})
@@ -80,12 +80,12 @@ var _ = Describe("PodDisruptionBudget", func() {
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			var pod map[string]interface{}
+			var pod map[string]any
 			err = json.Unmarshal([]byte(output), &pod)
 			Expect(err).NotTo(HaveOccurred())
 
-			metadata := pod["metadata"].(map[string]interface{})
-			labels := metadata["labels"].(map[string]interface{})
+			metadata := pod["metadata"].(map[string]any)
+			labels := metadata["labels"].(map[string]any)
 			operationID, ok := labels[hipconsts.LabelOperationID].(string)
 			Expect(ok).To(BeTrue(), "Pod should have operation-id label")
 			Expect(operationID).NotTo(BeEmpty(), "operation-id should not be empty")
@@ -96,23 +96,23 @@ var _ = Describe("PodDisruptionBudget", func() {
 			output, err = Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			var pdbList map[string]interface{}
+			var pdbList map[string]any
 			err = json.Unmarshal([]byte(output), &pdbList)
 			Expect(err).NotTo(HaveOccurred())
 
-			items := pdbList["items"].([]interface{})
+			items := pdbList["items"].([]any)
 			Expect(items).To(HaveLen(1), "Should have exactly one PDB for the daemon pod")
 
-			pdb := items[0].(map[string]interface{})
-			spec := pdb["spec"].(map[string]interface{})
+			pdb := items[0].(map[string]any)
+			spec := pdb["spec"].(map[string]any)
 
 			// Verify minAvailable is 1
 			minAvailable := spec["minAvailable"].(float64)
 			Expect(minAvailable).To(Equal(float64(1)), "PDB should have minAvailable=1")
 
 			// Verify selector matches operation-id
-			selector := spec["selector"].(map[string]interface{})
-			matchLabels := selector["matchLabels"].(map[string]interface{})
+			selector := spec["selector"].(map[string]any)
+			matchLabels := selector["matchLabels"].(map[string]any)
 			Expect(matchLabels[hipconsts.LabelOperationID]).To(Equal(operationID),
 				"PDB selector should match pod operation-id")
 		})
@@ -143,11 +143,11 @@ var _ = Describe("PodDisruptionBudget", func() {
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			var pdbList map[string]interface{}
+			var pdbList map[string]any
 			err = json.Unmarshal([]byte(output), &pdbList)
 			Expect(err).NotTo(HaveOccurred())
 
-			items := pdbList["items"].([]interface{})
+			items := pdbList["items"].([]any)
 			Expect(items).To(BeEmpty(), "PDB should be deleted when daemon pod is stopped")
 		})
 
@@ -233,17 +233,17 @@ var _ = Describe("PodDisruptionBudget", func() {
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			var pdbList map[string]interface{}
+			var pdbList map[string]any
 			err = json.Unmarshal([]byte(output), &pdbList)
 			Expect(err).NotTo(HaveOccurred())
 
-			items := pdbList["items"].([]interface{})
+			items := pdbList["items"].([]any)
 			Expect(items).To(HaveLen(1))
 
-			pdb := items[0].(map[string]interface{})
+			pdb := items[0].(map[string]any)
 
 			// The key test: PDB exists and is configured correctly
-			spec := pdb["spec"].(map[string]interface{})
+			spec := pdb["spec"].(map[string]any)
 			minAvailable := spec["minAvailable"].(float64)
 			Expect(minAvailable).To(Equal(float64(1)),
 				"PDB should protect the pod with minAvailable=1")
@@ -296,10 +296,10 @@ var _ = Describe("PodDisruptionBudget", func() {
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			var oldPDBList map[string]interface{}
+			var oldPDBList map[string]any
 			err = json.Unmarshal([]byte(output), &oldPDBList)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(oldPDBList["items"].([]interface{})).To(BeEmpty(),
+			Expect(oldPDBList["items"].([]any)).To(BeEmpty(),
 				"Old PDB should be deleted")
 
 			// Verify new PDB exists
@@ -363,12 +363,12 @@ var _ = Describe("PodDisruptionBudget", func() {
 				if err != nil {
 					return -1
 				}
-				var podList map[string]interface{}
+				var podList map[string]any
 				err = json.Unmarshal([]byte(output), &podList)
 				if err != nil {
 					return -1
 				}
-				return len(podList["items"].([]interface{}))
+				return len(podList["items"].([]any))
 			}, "60s", "2s").Should(Equal(0), "All pods should eventually be deleted after purge --all")
 
 			// Verify all PDBs are also deleted
@@ -376,10 +376,10 @@ var _ = Describe("PodDisruptionBudget", func() {
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			var pdbList map[string]interface{}
+			var pdbList map[string]any
 			err = json.Unmarshal([]byte(output), &pdbList)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(pdbList["items"].([]interface{})).To(BeEmpty(),
+			Expect(pdbList["items"].([]any)).To(BeEmpty(),
 				"All PDBs should be deleted when pods are purged")
 		})
 	})
@@ -409,11 +409,11 @@ var _ = Describe("PodDisruptionBudget", func() {
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			var pdbList map[string]interface{}
+			var pdbList map[string]any
 			err = json.Unmarshal([]byte(output), &pdbList)
 			Expect(err).NotTo(HaveOccurred())
 
-			items := pdbList["items"].([]interface{})
+			items := pdbList["items"].([]any)
 			Expect(items).To(BeEmpty(), "No PDB should be created when --create-pdb=false")
 		})
 
@@ -461,18 +461,18 @@ var _ = Describe("PodDisruptionBudget", func() {
 			output, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			var pdbList map[string]interface{}
+			var pdbList map[string]any
 			err = json.Unmarshal([]byte(output), &pdbList)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Since the command completes quickly, there shouldn't be any PDBs
 			// But let's verify by checking if any exist at all
-			items := pdbList["items"].([]interface{})
+			items := pdbList["items"].([]any)
 			for _, item := range items {
-				pdb := item.(map[string]interface{})
-				spec := pdb["spec"].(map[string]interface{})
-				selector := spec["selector"].(map[string]interface{})
-				matchLabels := selector["matchLabels"].(map[string]interface{})
+				pdb := item.(map[string]any)
+				spec := pdb["spec"].(map[string]any)
+				selector := spec["selector"].(map[string]any)
+				matchLabels := selector["matchLabels"].(map[string]any)
 
 				// If we find a PDB matching our test label, fail
 				if testLabelValue, ok := matchLabels["test"]; ok && testLabelValue == testLabel {

@@ -30,7 +30,9 @@ go vet -tags=e2e ./e2e/
 
 cyber_log "Running modernize"
 go run golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize@latest -fix ./...
-go run golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize@latest -fix -tags=e2e ./...
+# Modernize's own -tags flag is a no-op (deprecated); use GOFLAGS to pass build tags
+# to the underlying go/packages loader so e2e-tagged files are actually analyzed.
+GOFLAGS='-tags=e2e' go run golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize@latest -fix ./...
 
 cyber_log "Running golangci-lint"
 golangci-lint run

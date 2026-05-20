@@ -127,8 +127,8 @@ func GetProjectDir() (string, error) {
 	}
 
 	// If we're in the e2e directory, go up one level
-	if strings.HasSuffix(wd, "/e2e") {
-		return strings.TrimSuffix(wd, "/e2e"), nil
+	if before, ok := strings.CutSuffix(wd, "/e2e"); ok {
+		return before, nil
 	}
 
 	// If we're already at project root, return as-is

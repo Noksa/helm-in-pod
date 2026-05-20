@@ -56,7 +56,7 @@ func tokenize(s string) []string {
 	inSingle := false
 	inDouble := false
 
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		switch {
 		case c == '\'' && !inDouble:

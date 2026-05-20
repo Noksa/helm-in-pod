@@ -188,9 +188,9 @@ spec:
 				exitCode int
 			}
 			results := make(chan result, concurrency)
-			for i := 0; i < concurrency; i++ {
-				go func(idx int) {
-					label := fmt.Sprintf("test-id=parallel-%s-%d", randomString(4), idx)
+			for i := range concurrency {
+				go func() {
+					label := fmt.Sprintf("test-id=parallel-%s-%d", randomString(4), i)
 					args := []string{"in-pod", "exec",
 						"--labels", label,
 						"--copy-repo=false"}
@@ -203,13 +203,13 @@ spec:
 					cmd := exec.Command("helm", args...)
 					out, code := RunWithExitCode(cmd)
 					results <- result{output: out, exitCode: code}
-				}(i)
+				}()
 			}
 
 			// Collect all results within 3 minutes
 			timeout := time.After(3 * time.Minute)
 			passed := 0
-			for i := 0; i < concurrency; i++ {
+			for i := range concurrency {
 				select {
 				case r := <-results:
 					Expect(r.exitCode).To(Equal(0), "parallel exec %d failed:\n%s", i, r.output)
