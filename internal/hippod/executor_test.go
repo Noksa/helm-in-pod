@@ -231,4 +231,81 @@ var _ = Describe("exitCodeMarkerWriter", func() {
 		Expect(w.Found()).To(BeTrue())
 		Expect(w.ExitCode()).To(Equal(3))
 	})
+
+	It("captures negative exit codes (lock-in: no validation that codes are non-negative)", func() {
+		_, err := w.Write([]byte("###HIP_EXIT_CODE:-1###\n"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(w.Found()).To(BeTrue())
+		Expect(w.ExitCode()).To(Equal(-1))
+		Expect(cancelCalls).To(Equal(1))
+	})
+
+	It("locks in current behavior: stdout preceding the marker in the same Write is silently dropped", func() {
+		// In production, kubelet log batching can deliver stdout and the
+		// marker in a single chunk. The writer recognizes the marker and
+		// consumes the entire buffer — preceding user output is lost.
+		_, err := w.Write([]byte("important user output\n###HIP_EXIT_CODE:9###\n"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(w.Found()).To(BeTrue())
+		Expect(w.ExitCode()).To(Equal(9))
+		Expect(inner.String()).To(BeEmpty(),
+			"preceding stdout is dropped — KNOWN LIMITATION")
+	})
+
+	It("locks in current behavior: stdout following the marker in the same Write loses both", func() {
+		// Symmetric to the preceding-stdout case: when the marker has
+		// trailing output in the same Write, CutSuffix fails so the line
+		// is consumed but never registered.
+		_, err := w.Write([]byte("###HIP_EXIT_CODE:5###\nstdout after marker\n"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(w.Found()).To(BeFalse(),
+			"marker is consumed but not registered when trailing output is present — KNOWN LIMITATION")
+		Expect(cancelCalls).To(Equal(0))
+		Expect(inner.String()).To(BeEmpty(),
+			"trailing stdout is dropped together with the marker")
+	})
+
+	It("locks in current behavior: two markers in a single Write register neither", func() {
+		// strings.Cut splits on the FIRST prefix, leaving the second marker
+		// embedded in the value — strconv.Atoi then fails on the embedded
+		// '#' characters.
+		_, err := w.Write([]byte("###HIP_EXIT_CODE:1###\n###HIP_EXIT_CODE:2###\n"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(w.Found()).To(BeFalse(),
+			"two markers in one Write are dropped together — KNOWN LIMITATION")
+		Expect(cancelCalls).To(Equal(0))
+		Expect(inner.String()).To(BeEmpty())
+	})
+
+	It("locks in current behavior: empty marker value is silently dropped", func() {
+		_, err := w.Write([]byte("###HIP_EXIT_CODE:###\n"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(w.Found()).To(BeFalse(),
+			"empty value fails Atoi → marker not registered — KNOWN LIMITATION")
+		Expect(cancelCalls).To(Equal(0))
+		Expect(inner.String()).To(BeEmpty(),
+			"line is still consumed (not forwarded)")
+	})
+
+	It("locks in current behavior: value that overflows int is silently dropped", func() {
+		_, err := w.Write([]byte("###HIP_EXIT_CODE:99999999999999999999999###\n"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(w.Found()).To(BeFalse(),
+			"Atoi returns range error → marker not registered — KNOWN LIMITATION")
+		Expect(cancelCalls).To(Equal(0))
+		Expect(inner.String()).To(BeEmpty())
+	})
+
+	It("locks in current behavior: marker without the trailing ### suffix is still accepted", func() {
+		// The current code falls back to a bare prefix match when both
+		// `suffix+\n` and `suffix` CutSuffix calls return ok=false. The
+		// result is that a malformed line missing the suffix is accepted
+		// as long as the value parses as an int. Behavior is surprising
+		// but matches what the embedded script emits today.
+		_, err := w.Write([]byte("###HIP_EXIT_CODE:7\n"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(w.Found()).To(BeTrue())
+		Expect(w.ExitCode()).To(Equal(7))
+		Expect(cancelCalls).To(Equal(1))
+	})
 })
