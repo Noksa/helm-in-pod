@@ -106,41 +106,6 @@ var _ = Describe("isPodReady", func() {
 	})
 })
 
-var _ = Describe("NodeSelector", func() {
-	It("should handle single node selector", func() {
-		input := map[string]string{"disktype": "ssd"}
-		Expect(input).To(Equal(map[string]string{"disktype": "ssd"}))
-	})
-
-	It("should handle multiple node selectors", func() {
-		input := map[string]string{
-			"disktype":    "ssd",
-			"environment": "production",
-		}
-		Expect(input).To(HaveKeyWithValue("disktype", "ssd"))
-		Expect(input).To(HaveKeyWithValue("environment", "production"))
-	})
-
-	It("should handle node selector with empty value", func() {
-		input := map[string]string{"node-role.kubernetes.io/control-plane": ""}
-		Expect(input).To(HaveKeyWithValue("node-role.kubernetes.io/control-plane", ""))
-	})
-
-	It("should handle complex node selector keys", func() {
-		input := map[string]string{
-			"topology.kubernetes.io/zone":      "us-east-1a",
-			"node.kubernetes.io/instance-type": "m5.large",
-		}
-		Expect(input).To(HaveKeyWithValue("topology.kubernetes.io/zone", "us-east-1a"))
-		Expect(input).To(HaveKeyWithValue("node.kubernetes.io/instance-type", "m5.large"))
-	})
-
-	It("should handle empty node selector", func() {
-		input := map[string]string{}
-		Expect(input).To(BeEmpty())
-	})
-})
-
 var _ = Describe("handleTerminalPhase", func() {
 	var m *Manager
 
