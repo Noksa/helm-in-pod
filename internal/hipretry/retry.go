@@ -98,8 +98,8 @@ func isTransientError(err error) bool {
 	}
 
 	// Common transient network / server errors
+	// Note: context.Canceled is NOT transient — it indicates intentional cancellation.
 	if stderrors.Is(err, context.DeadlineExceeded) ||
-		stderrors.Is(err, context.Canceled) ||
 		strings.Contains(err.Error(), "EOF") ||
 		strings.Contains(err.Error(), "connection reset") ||
 		strings.Contains(err.Error(), "i/o timeout") {
