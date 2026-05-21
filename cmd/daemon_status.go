@@ -30,11 +30,7 @@ func newDaemonStatusCmd() *cobra.Command {
 
 			helmStr := "not found"
 			if info.HelmFound {
-				ver := "3"
-				if info.IsHelm4 {
-					ver = "4"
-				}
-				helmStr = fmt.Sprintf("v%s", ver)
+				helmStr = "v4"
 			}
 
 			rows := [][]string{

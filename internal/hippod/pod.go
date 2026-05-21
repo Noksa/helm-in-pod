@@ -13,8 +13,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -297,15 +295,12 @@ func (m *Manager) waitUntilPodIsDeleted(podName string) error {
 	return err
 }
 
-var helmMajorVersionRe = regexp.MustCompile(`v(\d+)\.`)
-
 // BootInfo holds pod metadata collected during the bundle copy step.
 type BootInfo struct {
 	HomeDirectory string
 	Whoami        string
 	ID            string
-	HelmVersion   string // raw string like "v3.14.0", "v4.0.0", or "none" when helm is absent
-	IsHelm4       bool
+	HelmVersion   string // raw string like "v4.0.0", or "none" when helm is absent
 	HelmFound     bool
 }
 
@@ -361,21 +356,12 @@ func (m *Manager) CopyFilesBundleWithBootInfo(pod *corev1.Pod, entries []helmtar
 		}
 		helmVer := parts[3]
 		helmFound := helmVer != "none" && helmVer != ""
-		isHelm4 := false
-		if helmFound {
-			if m := helmMajorVersionRe.FindStringSubmatch(helmVer); len(m) >= 2 {
-				if major, convErr := strconv.Atoi(m[1]); convErr == nil {
-					isHelm4 = major == 4
-				}
-			}
-		}
 
 		info = &BootInfo{
 			HomeDirectory: homeDir,
 			Whoami:        parts[1],
 			ID:            parts[2],
 			HelmVersion:   helmVer,
-			IsHelm4:       isHelm4,
 			HelmFound:     helmFound,
 		}
 		logz.HostPod().Debug().Msgf("Bundle extracted — user: %v, home: %v, helm: %v",
@@ -771,7 +757,6 @@ type DaemonInfo struct {
 	Age       time.Duration
 	Image     string
 	HelmFound bool
-	IsHelm4   bool
 	HomeDir   string
 }
 
@@ -802,7 +787,6 @@ func (m *Manager) ListDaemonPods() ([]DaemonInfo, error) {
 			info.Age = time.Since(pod.Status.StartTime.Time)
 		}
 		info.HelmFound = pod.Annotations[hipconsts.AnnotationHelmFound] == "true"
-		info.IsHelm4 = pod.Annotations[hipconsts.AnnotationHelm4] == "true"
 		info.HomeDir = pod.Annotations[hipconsts.AnnotationHomeDirectory]
 		infos = append(infos, info)
 	}
@@ -827,7 +811,6 @@ func (m *Manager) GetDaemonStatus(name string) (*DaemonInfo, error) {
 		info.Age = time.Since(pod.Status.StartTime.Time)
 	}
 	info.HelmFound = pod.Annotations[hipconsts.AnnotationHelmFound] == "true"
-	info.IsHelm4 = pod.Annotations[hipconsts.AnnotationHelm4] == "true"
 	info.HomeDir = pod.Annotations[hipconsts.AnnotationHomeDirectory]
 	return info, nil
 }
