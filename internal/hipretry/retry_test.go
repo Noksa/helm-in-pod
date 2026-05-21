@@ -239,6 +239,29 @@ var _ = Describe("hipretry", func() {
 		})
 	})
 
+	Describe("IsTransientError", func() {
+		It("returns false for context.Canceled (intentional cancellation, no retry)", func() {
+			Expect(IsTransientError(context.Canceled)).To(BeFalse())
+		})
+
+		It("returns true for context.DeadlineExceeded (transient timeout)", func() {
+			Expect(IsTransientError(context.DeadlineExceeded)).To(BeTrue())
+		})
+
+		It("returns true for errors containing EOF string", func() {
+			Expect(IsTransientError(stderrors.New("read tcp: EOF"))).To(BeTrue())
+		})
+
+		It("returns true for errors containing connection reset string", func() {
+			Expect(IsTransientError(stderrors.New("connection reset by peer"))).To(BeTrue())
+		})
+
+		It("returns false for 404 NotFound (permanent error)", func() {
+			err := &apierrors.StatusError{ErrStatus: metav1.Status{Code: http.StatusNotFound}}
+			Expect(IsTransientError(err)).To(BeFalse())
+		})
+	})
+
 	Describe("Unlimited retries mode (MaxAttempts=0)", func() {
 		It("never calls fn when maxAttempts=0", func() {
 			calls := 0
