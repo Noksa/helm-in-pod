@@ -36,10 +36,16 @@ while [ $MY_TIME -lt $END ]; do
   #echo "Waiting ${SCRIPT_PATH}"
   if [ ! -f "${SCRIPT_PATH}" ]; then
     sleep 1
+    MY_TIME=$((MY_TIME+1))
     continue
   fi
   break
 done
+
+if [ ! -f "${SCRIPT_PATH}" ]; then
+  echo "Timed out waiting for script file ${SCRIPT_PATH} (${TIMEOUT}s)" >&2
+  exit 1
+fi
 
 #echo "#### EXECUTION STARTED ####"
 "${SCRIPT_PATH}" &

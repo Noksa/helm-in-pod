@@ -567,11 +567,16 @@ func parseExitCodeFromError(err error) int {
 // exitCodeMarkerWriter wraps an io.Writer and intercepts the exit code marker
 // line emitted by the pod script in copy-from mode. The marker line is consumed
 // (not forwarded to the underlying writer) and the exit code is stored.
+//
+// The writer is safe for concurrent use. It buffers incomplete lines so that a
+// marker split across two Write() calls is still detected correctly.
 type exitCodeMarkerWriter struct {
+	mu         sync.Mutex
 	inner      io.Writer
 	found      bool
 	exitCode   int
 	cancelFunc context.CancelFunc
+	lineBuf    []byte // accumulates bytes until a newline is seen
 }
 
 func newExitCodeMarkerWriter(inner io.Writer, cancel context.CancelFunc) *exitCodeMarkerWriter {
@@ -579,37 +584,73 @@ func newExitCodeMarkerWriter(inner io.Writer, cancel context.CancelFunc) *exitCo
 }
 
 func (w *exitCodeMarkerWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	if w.found {
-		return w.inner.Write(p)
-	}
-	s := string(p)
-	prefix := hipconsts.CopyFromExitCodeMarkerPrefix
-	suffix := hipconsts.CopyFromExitCodeMarkerSuffix
-	if strings.Contains(s, prefix) {
-		// Extract exit code between prefix and suffix
-		_, after, _ := strings.Cut(s, prefix)
-		if codeStr, ok := strings.CutSuffix(after, suffix+"\n"); !ok {
-			codeStr, _ = strings.CutSuffix(after, suffix)
-			after = codeStr
-		} else {
-			after = codeStr
-		}
-		code, err := strconv.Atoi(strings.TrimSpace(after))
-		if err == nil {
-			w.found = true
-			w.exitCode = code
-			w.cancelFunc()
-		}
+		// After marker detected, discard any trailing data from the stream
+		// that may arrive before context cancellation propagates.
 		return len(p), nil
 	}
-	return w.inner.Write(p)
+
+	// Append incoming data to the line buffer and process complete lines.
+	w.lineBuf = append(w.lineBuf, p...)
+	for {
+		idx := bytes.IndexByte(w.lineBuf, '\n')
+		if idx < 0 {
+			// No complete line yet. Check if the buffer already contains the
+			// full marker without a trailing newline (end of stream).
+			if w.tryExtractMarker(string(w.lineBuf)) {
+				return len(p), nil
+			}
+			break
+		}
+		line := string(w.lineBuf[:idx])
+		w.lineBuf = w.lineBuf[idx+1:]
+
+		if w.tryExtractMarker(line) {
+			return len(p), nil
+		}
+		// Not a marker line — forward to the underlying writer.
+		if _, err := w.inner.Write([]byte(line + "\n")); err != nil {
+			return len(p), err
+		}
+	}
+	return len(p), nil
+}
+
+// tryExtractMarker checks if line contains the exit code marker. If found,
+// it sets the exit code, marks found=true, and cancels the stream context.
+func (w *exitCodeMarkerWriter) tryExtractMarker(line string) bool {
+	prefix := hipconsts.CopyFromExitCodeMarkerPrefix
+	suffix := hipconsts.CopyFromExitCodeMarkerSuffix
+	if !strings.Contains(line, prefix) {
+		return false
+	}
+	_, after, _ := strings.Cut(line, prefix)
+	codeStr, ok := strings.CutSuffix(after, suffix)
+	if !ok {
+		return false
+	}
+	code, err := strconv.Atoi(strings.TrimSpace(codeStr))
+	if err != nil {
+		return false
+	}
+	w.found = true
+	w.exitCode = code
+	w.cancelFunc()
+	return true
 }
 
 func (w *exitCodeMarkerWriter) Found() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	return w.found
 }
 
 func (w *exitCodeMarkerWriter) ExitCode() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	return w.exitCode
 }
 
