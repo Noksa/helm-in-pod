@@ -117,7 +117,7 @@ helm in-pod daemon status --name dev
 helm in-pod daemon stop --name dev
 ```
 
-**10x faster** for multiple operations! Perfect for CI/CD, interactive development, and batch deployments.
+Much faster for multiple operations — pod startup runs once, not per command. Perfect for CI/CD, interactive development, and batch deployments.
 
 > 💡 Set `HELM_IN_POD_DAEMON_NAME` environment variable to avoid repeating `--name` on every command. See [DAEMON.md](DAEMON.md) for details.
 
@@ -148,7 +148,7 @@ helm in-pod exec [FLAGS] -- "COMMAND"
 | Flag              | Description                                                        |
 |-------------------|--------------------------------------------------------------------|
 | `--verbose-logs`  | Enable debug logs                                                  |
-| `--timeout`       | Gracefully terminate command after duration (default: 2h at runtime) |
+| `--timeout`       | Gracefully terminate command after duration (default: `2h`) |
 
 > ⚠️ **Note**: For `exec` and `daemon start`, the plugin adds 10 minutes to the specified `--timeout` internally for pod operations (startup, file copy, etc.). For example, `--timeout 2h` results in a total pod lifetime of 2h10m. In `daemon exec`, the timeout applies directly to command execution with no additional overhead. See [DAEMON.md](DAEMON.md#️-timeout-behavior) for details.
 

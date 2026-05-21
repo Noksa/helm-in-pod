@@ -20,7 +20,7 @@ helm-in-pod/
 ├── scripts/             # check.sh, install*.sh, make_archieve.sh, test-plugin.sh
 ├── docs/RELEASING.md    # Manual release procedure (tag, notes, GHCR push)
 ├── DAEMON.md            # Daemon-mode user docs (`daemon start/exec/shell/...`)
-├── CLAUDE.md            # Earlier AI-assistant notes; kept for compat, content merged here
+├── CLAUDE.md            # Short AI-assistant quick reference; full content is in AGENTS.md
 ├── .github/workflows/   # ci.yml (lint+unit+e2e matrix), release.yml (build+sign+OCI push)
 ├── .golangci.yml        # v2 config; `build-tags: [e2e]` is set globally
 └── .helm-plugin-dev/    # local-only plugin symlink target (created by install-local.sh)
