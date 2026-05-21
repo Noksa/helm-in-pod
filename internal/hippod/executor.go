@@ -434,7 +434,11 @@ func (m *Manager) waitForPodCompletion(ctx context.Context, pod *corev1.Pod) err
 	// closes over the watcher variable — not its value — so it always stops
 	// whichever watcher is current when the function returns, including after
 	// the channel-reopen path below reassigns the variable.
-	defer func() { watcher.Stop() }()
+	defer func() {
+		if watcher != nil {
+			watcher.Stop()
+		}
+	}()
 
 	for {
 		select {
