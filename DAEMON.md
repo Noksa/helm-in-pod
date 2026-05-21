@@ -244,7 +244,7 @@ helm in-pod daemon stop --name dev
 | First run | ~10-15s | ~10-15s (start) |
 | Second run | ~10-15s | ~1-2s ⚡ |
 | Third run | ~10-15s | ~1-2s ⚡ |
-| 10 commands | ~100-150s | ~10-15s + 10-20s = **~30s** 🚀 |
+| 10 commands | ~100-150s | ~10-15s (start) + ~10-20s (execs) ⚡ |
 
 ## 🔐 RBAC / Cluster Resources
 
