@@ -251,6 +251,19 @@ var _ = Describe("hipretry", func() {
 		})
 	})
 
+	Describe("extractRetryAfter", func() {
+		It("extracts seconds from ErrStatus.Details.Causes with Type=RetryAfter", func() {
+			err := &apierrors.StatusError{ErrStatus: metav1.Status{
+				Details: &metav1.StatusDetails{
+					Causes: []metav1.StatusCause{
+						{Type: "RetryAfter", Message: "5"},
+					},
+				},
+			}}
+			Expect(extractRetryAfter(err)).To(Equal(5 * time.Second))
+		})
+	})
+
 	Describe("Context deadline during backoff", func() {
 		It("stops immediately when deadline is exceeded", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Millisecond)
