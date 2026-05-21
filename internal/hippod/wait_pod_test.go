@@ -157,6 +157,35 @@ var _ = Describe("waitForPodCompletion", func() {
 		Expect(m.waitForPodCompletion(context.Background(), seed)).To(Succeed())
 	})
 
+	It("returns a wrapped error when Get and second Watch both fail after channel close", func() {
+		m, cs := newManagerWithFakeClient()
+
+		firstWatcher := watch.NewFakeWithChanSize(1, false)
+		call := 0
+		cs.PrependWatchReactor("pods", func(_ clienttesting.Action) (bool, watch.Interface, error) {
+			call++
+			if call == 1 {
+				return true, firstWatcher, nil
+			}
+			return true, nil, errors.New("watch forbidden")
+		})
+		cs.PrependReactor("get", "pods", func(_ clienttesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errors.New("get forbidden")
+		})
+
+		go func() {
+			time.Sleep(20 * time.Millisecond)
+			firstWatcher.Stop()
+		}()
+
+		seed := makePod("p1", ns, corev1.PodPending, 0)
+		err := m.waitForPodCompletion(context.Background(), seed)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("failed to re-open watch"))
+		Expect(err.Error()).To(ContainSubstring("watch forbidden"))
+		Expect(call).To(Equal(2), "second Watch call must have been attempted")
+	})
+
 	It("re-opens the watch when channel closes mid-wait and catches terminal event on the new watcher", func() {
 		m, cs := newManagerWithFakeClient()
 
