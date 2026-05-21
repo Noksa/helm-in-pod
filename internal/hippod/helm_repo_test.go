@@ -123,44 +123,26 @@ var _ = Describe("updateHelmRepositories", func() {
 			server.Close()
 		})
 
-		It("sends 'helm repo update' when UpdateRepo is empty and isHelm4=true", func() {
+		It("sends 'helm repo update' (no --fail-on-repo-update-fail) when UpdateRepo is empty", func() {
 			pod := testPod("p", ns)
 			opts := cmdoptions.ExecOptions{UpdateRepo: nil, UpdateRepoAttempts: 1}
-			_ = m.updateHelmRepositories(pod, opts, true)
+			_ = m.updateHelmRepositories(pod, opts)
 			cmds := cap.commands()
 			Expect(cmds).To(HaveLen(1))
 			Expect(cmds[0]).To(ContainSubstring("helm repo update"))
 			Expect(cmds[0]).NotTo(ContainSubstring("--fail-on-repo-update-fail"))
 		})
 
-		It("adds --fail-on-repo-update-fail when UpdateRepo is empty and isHelm4=false", func() {
-			pod := testPod("p", ns)
-			opts := cmdoptions.ExecOptions{UpdateRepo: nil, UpdateRepoAttempts: 1}
-			_ = m.updateHelmRepositories(pod, opts, false)
-			cmds := cap.commands()
-			Expect(cmds).To(HaveLen(1))
-			Expect(cmds[0]).To(ContainSubstring("helm repo update"))
-			Expect(cmds[0]).To(ContainSubstring("--fail-on-repo-update-fail"))
-		})
-
-		It("sends 'helm repo update <repo>' per entry when UpdateRepo is non-empty (helm4)", func() {
+		It("sends 'helm repo update <repo>' per entry when UpdateRepo is non-empty", func() {
 			pod := testPod("p", ns)
 			opts := cmdoptions.ExecOptions{UpdateRepo: []string{"stable", "bitnami"}, UpdateRepoAttempts: 1}
-			_ = m.updateHelmRepositories(pod, opts, true)
+			_ = m.updateHelmRepositories(pod, opts)
 			cmds := cap.commands()
 			Expect(cmds).To(HaveLen(2))
 			Expect(cmds[0]).To(ContainSubstring("helm repo update stable"))
+			Expect(cmds[0]).NotTo(ContainSubstring("--fail-on-repo-update-fail"))
 			Expect(cmds[1]).To(ContainSubstring("helm repo update bitnami"))
-		})
-
-		It("adds --fail-on-repo-update-fail per repo when isHelm4=false", func() {
-			pod := testPod("p", ns)
-			opts := cmdoptions.ExecOptions{UpdateRepo: []string{"stable"}, UpdateRepoAttempts: 1}
-			_ = m.updateHelmRepositories(pod, opts, false)
-			cmds := cap.commands()
-			Expect(cmds).To(HaveLen(1))
-			Expect(cmds[0]).To(ContainSubstring("helm repo update stable"))
-			Expect(cmds[0]).To(ContainSubstring("--fail-on-repo-update-fail"))
+			Expect(cmds[1]).NotTo(ContainSubstring("--fail-on-repo-update-fail"))
 		})
 	})
 
@@ -172,7 +154,7 @@ var _ = Describe("updateHelmRepositories", func() {
 				UpdateRepo:         []string{"repo1", "repo2"},
 				UpdateRepoAttempts: 0,
 			}
-			err := m.updateHelmRepositories(testPod("p", ns), opts, true)
+			err := m.updateHelmRepositories(testPod("p", ns), opts)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -186,7 +168,7 @@ var _ = Describe("updateHelmRepositories", func() {
 				UpdateRepo:         []string{"repo1", "repo2", "repo3"},
 				UpdateRepoAttempts: 1,
 			}
-			err := m.updateHelmRepositories(pod, opts, true)
+			err := m.updateHelmRepositories(pod, opts)
 			Expect(err).To(HaveOccurred())
 
 			// errors.Join produces a single error whose message is all sub-errors
@@ -203,13 +185,13 @@ var _ = Describe("updateHelmRepositories", func() {
 				UpdateRepo:         []string{"stable", "bitnami", "jetstack"},
 				UpdateRepoAttempts: 0,
 			}
-			Expect(m.updateHelmRepositories(testPod("p", ns), opts, true)).NotTo(HaveOccurred())
+			Expect(m.updateHelmRepositories(testPod("p", ns), opts)).NotTo(HaveOccurred())
 		})
 
 		It("returns nil when UpdateRepo is empty and UpdateRepoAttempts=0", func() {
 			m, _ := newManagerWithFakeClientAndPod(testPod("p", ns))
 			opts := cmdoptions.ExecOptions{UpdateRepo: nil, UpdateRepoAttempts: 0}
-			Expect(m.updateHelmRepositories(testPod("p", ns), opts, true)).NotTo(HaveOccurred())
+			Expect(m.updateHelmRepositories(testPod("p", ns), opts)).NotTo(HaveOccurred())
 		})
 
 		// Verify errors.Join unwrapping yields individual errors for each repo.
@@ -221,7 +203,7 @@ var _ = Describe("updateHelmRepositories", func() {
 				UpdateRepo:         []string{"alpha", "beta"},
 				UpdateRepoAttempts: 1,
 			}
-			err := m.updateHelmRepositories(testPod("p", ns), opts, true)
+			err := m.updateHelmRepositories(testPod("p", ns), opts)
 			Expect(err).To(HaveOccurred())
 
 			// errors.Join creates an interface with Unwrap() []error
@@ -244,7 +226,7 @@ var _ = Describe("UpdateHelmRepositories vs SyncHelmRepositories annotation asym
 		m, cs := newManagerWithFakeClientAndPod(pod)
 
 		opts := cmdoptions.ExecOptions{UpdateRepo: nil, UpdateRepoAttempts: 0}
-		Expect(m.UpdateHelmRepositories(pod, opts, true)).NotTo(HaveOccurred())
+		Expect(m.UpdateHelmRepositories(pod, opts)).NotTo(HaveOccurred())
 
 		updated, err := cs.CoreV1().Pods(ns).Get(context.Background(), pod.Name, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
@@ -258,7 +240,7 @@ var _ = Describe("UpdateHelmRepositories vs SyncHelmRepositories annotation asym
 
 		// repoPreCopied=true skips the file-copy path and calls updateHelmRepositories directly.
 		opts := cmdoptions.ExecOptions{UpdateRepo: nil, UpdateRepoAttempts: 0}
-		Expect(m.SyncHelmRepositories(pod, opts, "/home/user", true, true)).NotTo(HaveOccurred())
+		Expect(m.SyncHelmRepositories(pod, opts, "/home/user", true)).NotTo(HaveOccurred())
 
 		// Pod must NOT have the annotation.
 		unchanged, err := cs.CoreV1().Pods(ns).Get(context.Background(), pod.Name, metav1.GetOptions{})

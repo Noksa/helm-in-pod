@@ -158,7 +158,7 @@ The pod is deleted after the command completes, even on failure.`,
 		}
 
 		if opts.CopyRepo && bootInfo.HelmFound && repoConfigStaged {
-			err = internal.Pod().SyncHelmRepositories(pod, opts, bootInfo.HomeDirectory, bootInfo.IsHelm4, true)
+			err = internal.Pod().SyncHelmRepositories(pod, opts, bootInfo.HomeDirectory, true)
 			if err != nil {
 				return err
 			}

@@ -46,7 +46,6 @@ func newDaemonExecCmd() *cobra.Command {
 			}
 
 			helmFound := pod.Annotations[hipconsts.AnnotationHelmFound] == "true"
-			isHelm4 := pod.Annotations[hipconsts.AnnotationHelm4] == "true"
 
 			if helmFound && (opts.CopyRepo || len(opts.UpdateRepo) > 0 || opts.UpdateAllRepos) {
 				if opts.CopyAttempts < 1 {
@@ -58,19 +57,19 @@ func newDaemonExecCmd() *cobra.Command {
 
 				switch {
 				case opts.CopyRepo:
-					err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, homeDirectory, isHelm4, false)
+					err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, homeDirectory, false)
 					if err != nil {
 						return err
 					}
 				case opts.UpdateAllRepos:
 					// Update all repos without copying
 					opts.UpdateRepo = []string{}
-					err = internal.Pod().UpdateHelmRepositories(pod, opts.ExecOptions, isHelm4)
+					err = internal.Pod().UpdateHelmRepositories(pod, opts.ExecOptions)
 					if err != nil {
 						return err
 					}
 				case len(opts.UpdateRepo) > 0:
-					err = internal.Pod().UpdateHelmRepositories(pod, opts.ExecOptions, isHelm4)
+					err = internal.Pod().UpdateHelmRepositories(pod, opts.ExecOptions)
 					if err != nil {
 						return err
 					}

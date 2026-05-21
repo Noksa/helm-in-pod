@@ -31,11 +31,7 @@ func newDaemonListCmd() *cobra.Command {
 			for _, info := range infos {
 				helmStr := "no"
 				if info.HelmFound {
-					ver := "3"
-					if info.IsHelm4 {
-						ver = "4"
-					}
-					helmStr = fmt.Sprintf("v%s", ver)
+					helmStr = "v4"
 				}
 				_ = table.Append([]string{
 					color.CyanString(info.Name),

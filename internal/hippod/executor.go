@@ -76,7 +76,7 @@ func (m *Manager) GetPodUserInfo(pod *corev1.Pod) (*UserInfo, error) {
 	}, nil
 }
 
-func (m *Manager) SyncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, homeDirectory string, isHelm4 bool, repoPreCopied bool) error {
+func (m *Manager) SyncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, homeDirectory string, repoPreCopied bool) error {
 	if !repoPreCopied {
 		settings := cli.New()
 		_, statErr := os.Stat(settings.RepositoryConfig)
@@ -108,11 +108,11 @@ func (m *Manager) SyncHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOpti
 		}
 	}
 
-	return m.updateHelmRepositories(pod, opts, isHelm4)
+	return m.updateHelmRepositories(pod, opts)
 }
 
-func (m *Manager) UpdateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, isHelm4 bool) error {
-	err := m.updateHelmRepositories(pod, opts, isHelm4)
+func (m *Manager) UpdateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions) error {
+	err := m.updateHelmRepositories(pod, opts)
 	if err != nil {
 		return err
 	}
@@ -124,14 +124,11 @@ func (m *Manager) UpdateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 	})
 }
 
-func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions, isHelm4 bool) error {
+func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOptions) error {
 	if len(opts.UpdateRepo) == 0 {
 		return hipretry.RetryWithContext(m.ctx, opts.UpdateRepoAttempts, func() error {
 			logz.Pod().Info().Msgf("Fetching updates from %v helm repositories", color.GreenString("all"))
 			cmdToUse := "helm repo update"
-			if !isHelm4 {
-				cmdToUse = fmt.Sprintf("%v --fail-on-repo-update-fail", cmdToUse)
-			}
 			stdout, stderr, err := m.client().ExecInPod(cmdToUse,
 				hipconsts.ContainerName, pod.Name, pod.Namespace,
 				operatorkclient.WithRawCommand(true))
@@ -148,9 +145,6 @@ func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 		err := hipretry.RetryWithContext(m.ctx, opts.UpdateRepoAttempts, func() error {
 			logz.Pod().Info().Msgf("Fetching updates from %v helm repository", color.CyanString(repo))
 			cmdToUse := fmt.Sprintf("helm repo update %v", repo)
-			if !isHelm4 {
-				cmdToUse = fmt.Sprintf("%v --fail-on-repo-update-fail", cmdToUse)
-			}
 			stdout, stderr, err := m.client().ExecInPod(cmdToUse,
 				hipconsts.ContainerName, pod.Name, pod.Namespace,
 				operatorkclient.WithRawCommand(true))

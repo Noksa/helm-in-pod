@@ -109,7 +109,7 @@ Use 'daemon exec' to run commands and 'daemon stop' to tear down the pod.`,
 			}
 
 			if opts.CopyRepo && bootInfo.HelmFound && repoConfigStaged {
-				err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, bootInfo.HomeDirectory, bootInfo.IsHelm4, true)
+				err = internal.Pod().SyncHelmRepositories(pod, opts.ExecOptions, bootInfo.HomeDirectory, true)
 				if err != nil {
 					return err
 				}
@@ -118,9 +118,6 @@ Use 'daemon exec' to run commands and 'daemon stop' to tear down the pod.`,
 			annotations := map[string]string{
 				hipconsts.AnnotationHomeDirectory: bootInfo.HomeDirectory,
 				hipconsts.AnnotationHelmFound:     fmt.Sprintf("%v", bootInfo.HelmFound),
-			}
-			if bootInfo.HelmFound {
-				annotations[hipconsts.AnnotationHelm4] = fmt.Sprintf("%v", bootInfo.IsHelm4)
 			}
 			err = internal.Pod().AnnotatePod(pod, annotations)
 			if err != nil {
