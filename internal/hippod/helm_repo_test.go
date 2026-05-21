@@ -123,26 +123,26 @@ var _ = Describe("updateHelmRepositories", func() {
 			server.Close()
 		})
 
-		It("sends 'helm repo update --fail-on-repo-update-fail' when UpdateRepo is empty", func() {
+		It("sends 'helm repo update' (no --fail-on-repo-update-fail) when UpdateRepo is empty", func() {
 			pod := testPod("p", ns)
 			opts := cmdoptions.ExecOptions{UpdateRepo: nil, UpdateRepoAttempts: 1}
 			_ = m.updateHelmRepositories(pod, opts)
 			cmds := cap.commands()
 			Expect(cmds).To(HaveLen(1))
 			Expect(cmds[0]).To(ContainSubstring("helm repo update"))
-			Expect(cmds[0]).To(ContainSubstring("--fail-on-repo-update-fail"))
+			Expect(cmds[0]).NotTo(ContainSubstring("--fail-on-repo-update-fail"))
 		})
 
-		It("sends 'helm repo update <repo> --fail-on-repo-update-fail' per entry when UpdateRepo is non-empty", func() {
+		It("sends 'helm repo update <repo>' per entry when UpdateRepo is non-empty", func() {
 			pod := testPod("p", ns)
 			opts := cmdoptions.ExecOptions{UpdateRepo: []string{"stable", "bitnami"}, UpdateRepoAttempts: 1}
 			_ = m.updateHelmRepositories(pod, opts)
 			cmds := cap.commands()
 			Expect(cmds).To(HaveLen(2))
 			Expect(cmds[0]).To(ContainSubstring("helm repo update stable"))
-			Expect(cmds[0]).To(ContainSubstring("--fail-on-repo-update-fail"))
+			Expect(cmds[0]).NotTo(ContainSubstring("--fail-on-repo-update-fail"))
 			Expect(cmds[1]).To(ContainSubstring("helm repo update bitnami"))
-			Expect(cmds[1]).To(ContainSubstring("--fail-on-repo-update-fail"))
+			Expect(cmds[1]).NotTo(ContainSubstring("--fail-on-repo-update-fail"))
 		})
 	})
 

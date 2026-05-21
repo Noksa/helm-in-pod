@@ -128,7 +128,7 @@ func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 	if len(opts.UpdateRepo) == 0 {
 		return hipretry.RetryWithContext(m.ctx, opts.UpdateRepoAttempts, func() error {
 			logz.Pod().Info().Msgf("Fetching updates from %v helm repositories", color.GreenString("all"))
-			cmdToUse := "helm repo update --fail-on-repo-update-fail"
+			cmdToUse := "helm repo update"
 			stdout, stderr, err := m.client().ExecInPod(cmdToUse,
 				hipconsts.ContainerName, pod.Name, pod.Namespace,
 				operatorkclient.WithRawCommand(true))
@@ -144,7 +144,7 @@ func (m *Manager) updateHelmRepositories(pod *corev1.Pod, opts cmdoptions.ExecOp
 	for _, repo := range opts.UpdateRepo {
 		err := hipretry.RetryWithContext(m.ctx, opts.UpdateRepoAttempts, func() error {
 			logz.Pod().Info().Msgf("Fetching updates from %v helm repository", color.CyanString(repo))
-			cmdToUse := fmt.Sprintf("helm repo update %v --fail-on-repo-update-fail", repo)
+			cmdToUse := fmt.Sprintf("helm repo update %v", repo)
 			stdout, stderr, err := m.client().ExecInPod(cmdToUse,
 				hipconsts.ContainerName, pod.Name, pod.Namespace,
 				operatorkclient.WithRawCommand(true))
